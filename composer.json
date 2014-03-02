@@ -1,0 +1,6 @@
+{
+    "require": {
+        "pimple/pimple": "1.0.*",
+        "michelf/php-markdown": "~1.3"
+    }
+}

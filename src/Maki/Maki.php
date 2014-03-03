@@ -88,7 +88,7 @@ class Maki extends \Pimple
         }
 
         if ( ! $this->offsetExists('cache_dir')) {
-            $this['cache_dir'] = '.maki_cache';
+            $this['cache_dir'] = '_maki_cache';
         }
 
         // Normalize path
@@ -592,8 +592,6 @@ class Markdown
                 }
             }
         }
-
-        var_dump($this->locked);
     }
 
     public function getName()

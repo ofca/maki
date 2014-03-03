@@ -1,0 +1,5 @@
+/.maki_cache
+/vendor
+/composer.lock
+/maki.sublime-project
+/test.md

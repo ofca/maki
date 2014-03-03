@@ -11,7 +11,8 @@ ini_set('display_errors', 'On');
 
 $app = new \Maki\Maki(array(
     'docroot'   => __DIR__.DIRECTORY_SEPARATOR,
-    'docs.path' => 'docs/'
+    'docs.path' => 'docs/',
+    'editable'  => true
 ));
 
 /*

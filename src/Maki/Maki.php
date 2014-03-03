@@ -8,9 +8,13 @@ class Maki extends \Pimple
     protected $editing = false;
     protected $sidebar;
     protected $page;
+    protected $sessionId;
 
     public function __construct(array $values = array())
     {
+        session_start();
+        $this->sessionId = session_id();
+
         parent::__construct($values);
 
         // Define default markdown parser
@@ -71,8 +75,8 @@ class Maki extends \Pimple
             $this['editable'] = true;
         }
 
-        if ( ! $this->offsetExists('source_viewable')) {
-            $this['source_viewable'] = true;
+        if ( ! $this->offsetExists('viewable')) {
+            $this['viewable'] = true;
         }
 
         if ( ! $this->offsetExists('title')) {
@@ -83,6 +87,13 @@ class Maki extends \Pimple
             $this['subtitle'] = 'SIMPLE <strong>MA</strong>RKDOWN WI<strong>KI</strong>';
         }
 
+        if ( ! $this->offsetExists('cache_dir')) {
+            $this['cache_dir'] = '.maki_cache';
+        }
+
+        // Normalize path
+        $this['cache_dir'] = rtrim($this['cache_dir'], '/').'/';
+
         // Create htaccess if not exists yet
         if ( ! is_file($this['docroot'].'.htaccess')) {
             $this->createHtAccess();
@@ -90,6 +101,11 @@ class Maki extends \Pimple
             header('HTTP/1.1 302 Moved Temporarily');
             header('Location: '.$this->getUrl());
             exit;
+        }
+
+        // Create cache dir
+        if ( ! is_dir($this->getCacheDirAbsPath())) {
+            mkdir($this->getCacheDirAbsPath(), 0700, true);
         }
 
         $url = $this->getCurrentUrl();
@@ -105,7 +121,7 @@ class Maki extends \Pimple
 
         $this->page = $this->createFileInstance($url);
 
-        if ($this['editable'] and isset($_GET['edit'])) {
+        if (($this['editable'] or $this['viewable']) and isset($_GET['edit'])) {
             $this->editing = true;
         }
 
@@ -147,6 +163,16 @@ class Maki extends \Pimple
         $host = $_SERVER['HTTP_HOST'];
         
         return $protocol.'://'.$host.$port.$this['url.base'];
+    }
+
+    public function getCacheDirAbsPath()
+    {
+        return $this['docroot'].$this['cache_dir'];
+    }
+
+    public function getSessionId()
+    {
+        return $this->sessionId;
     }
 
     public function redirect($url, $permanent = false)
@@ -239,18 +265,21 @@ class Maki extends \Pimple
     {
         $docroot = $this['docroot'];
         $url = $this->getUrl();
-        $bootstrapPath = $url.'_maki_cache/bootstrap.min.css';
-        $jQueryPath = $url.'_maki_cache/jquery.min.js';
+        $bootstrapPath = $this['cache_dir'].'bootstrap.min.css';
+        $jQueryPath = $this['cache_dir'].'jquery.min.js';
 
-        if ( ! file_exists($docroot.'_maki_cache')) {
-            mkdir($docroot.'_maki_cache', 0777);
-
-            file_put_contents($docroot.$bootstrapPath, file_get_contents($this->bootstrapUrl));
-            file_put_contents($docroot.$jQueryPath, file_get_contents($this->jQueryUrl));
+        if ( ! file_exists($docroot.$bootstrapPath)) {
+            file_put_contents($docroot.$bootstrapPath, file_get_contents($this['theme.bootstrap']));            
         }
 
-        $editButton = ( ! $this['editable'] and $this['source_viewable']) ? 'view source' : 'edit';
+        if ( ! file_exists($docroot.$jQueryPath)) {
+            file_put_contents($docroot.$jQueryPath, file_get_contents($this['theme.jQuery']));
+        }
 
+        $editable = $this['editable'];
+        $viewable = $this['viewable'];
+        $editButton = ( ! $editable and $viewable) ? 'view source' : 'edit';
+        
         ?>
 <!DOCTYPE html>
 <html>
@@ -258,9 +287,9 @@ class Maki extends \Pimple
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel='stylesheet' href='<?php echo $bootstrapPath ?>'>
+        <link rel='stylesheet' href='<?php echo $url.$bootstrapPath ?>'>
         <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,800&subset=latin,latin-ext' rel='stylesheet' type='text/css'>
-        <script src='<?php echo $jQueryPath ?>'></script>
+        <script src='<?php echo $url.$jQueryPath ?>'></script>
         <style>
             body {
                 background: #303030;
@@ -331,7 +360,9 @@ class Maki extends \Pimple
                 height: 600px;
                 font-size: 11px;
                 font-family: "Courier New";
-                word-wrap: no-wrap;
+                background: #303030;
+                color: #ADADAD;
+                border-color: transparent;
                 margin-top: 20px;
             }
 
@@ -409,7 +440,7 @@ class Maki extends \Pimple
                 <div class='col-md-3 sidebar'>
                     <div class='sidebar-inner'>
                         <?php echo $this->sidebar->toHTML() ?>
-                        <?php if ($this['editable']): ?>
+                        <?php if ($editable or $viewable): ?>
                             <div class='page-actions'>
                                 <a href='<?php echo $this->sidebar->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
                             </div>
@@ -432,18 +463,28 @@ class Maki extends \Pimple
                         <?php if ($this->editing): ?>
                             <div class='page-actions'>
                                 <a href='<?php echo $this->getPageUrl() ?>' class='btn btn-xs btn-info'>back</a>
-                                <a class='btn btn-xs btn-success save-btn'>save</a>
-                                <span class='saved-info'>Document saved.</span>
+                                <?php if ($editable and $this->page->isNotLocked()): ?>
+                                    <a class='btn btn-xs btn-success save-btn'>save</a>
+                                    <span class='saved-info'>Document saved.</span>
+                                <?php endif ?>
+
+                                <?php if ($this->page->isLocked()): ?>
+                                    <span class='saved-info' style='display: inline-block'>Someone else is editing this document now.</span>
+                                <?php endif ?>
                             </div>
                             <textarea id='textarea' class='textarea form-control'><?php echo $this->page->getContent() ?></textarea>
                         <?php else: ?>
                             <?php echo $this->page->toHTML() ?>
-                            <?php if ($this['editable']): ?>
+
+                            <?php if ($editable or $viewable): ?>
                                 <div class='page-actions clearfix'>
-                                    <a href='<?php echo $this->getPageUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
+                                    <?php if ($editable): ?>
+                                        <a href='<?php echo $this->getPageUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
+                                    <?php endif ?>
                                     <a href='<?php echo $this->getPageUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
                                 </div>
                             <?php endif ?>
+
                         <?php endif ?>
                     </div>
                 </div>
@@ -458,36 +499,38 @@ class Maki extends \Pimple
             
         </script>
         <script>
-            var $saveBtns = $('.save-btn'),
-                $saved = $('.saved-info');
+            <?php if ($this->editing and $editable and $this->page->isNotLocked()): ?>
+                var $saveBtns = $('.save-btn'),
+                    $saved = $('.saved-info');
 
-            function save() {
-                $.ajax({
-                    url: '<?php $this->getPageUrl() ?>?save=1',
-                    method: 'post',
-                    data: {
-                        content: $('#textarea').val()
-                    },
-                    success: function() {
-                        $saveBtns.attr('disabled', 'disabled');
-                        $saved.show();
-                        setTimeout(function() { save(); }, 5000);
-                    }
-                });
-            };
+                function save() {
+                    $.ajax({
+                        url: '<?php $this->getPageUrl() ?>?save=1',
+                        method: 'post',
+                        data: {
+                            content: $('#textarea').val()
+                        },
+                        success: function() {
+                            $saveBtns.attr('disabled', 'disabled');
+                            $saved.show();
+                            setTimeout(function() { save(); }, 5000);
+                        }
+                    });
+                };
 
-            var editing = <?php echo var_export($this->editing, true) ?>;
+                var editing = <?php echo var_export($this->editing, true) ?>;
 
-            if (editing) {
-                $('#textarea').on('keyup', function() {
-                    $saved.hide();
-                    $saveBtns.removeAttr('disabled');
-                });
+                if (editing) {
+                    $('#textarea').on('keyup', function() {
+                        $saved.hide();
+                        $saveBtns.removeAttr('disabled');
+                    });
 
-                $(document).on('click', '.save-btn', save);
+                    $(document).on('click', '.save-btn', save);
 
-                save();
-            }
+                    save();
+                }
+            <?php endif ?>
 
             $(document).on('click', '[data-confirm]', function(e) {
                 if (confirm($(this).attr('data-confirm'))) {
@@ -517,6 +560,7 @@ class Markdown
     protected $exists = false;
     protected $content;
     protected $loaded = false;
+    protected $locked = false;
     protected $breadcrumb = null;
 
     public function __construct($app, $filePath)
@@ -529,6 +573,27 @@ class Markdown
         if (is_file($this->fileAbsPath)) {
             $this->exists = true;
         }
+
+        $cacheDir = $this->app->getCacheDirAbsPath().'docs/';
+
+        if (is_file($cacheDir.$this->name)) {            
+            $time = time() - filemtime($cacheDir.$this->name);
+
+            // Last edited more then 2 minutes ago
+            if ($time > 120) {
+                unlink($cacheDir.$this->name);
+            } else {
+                // See who editing
+                $id = file_get_contents($cacheDir.$this->name);
+
+                // Someone else is editing this file now
+                if ($this->app->getSessionId() != $id) {
+                    $this->locked = true;
+                }
+            }
+        }
+
+        var_dump($this->locked);
     }
 
     public function getName()
@@ -593,6 +658,10 @@ class Markdown
 
     public function save()
     {
+        if ($this->locked) {
+            return false;
+        }
+
         $dirName = pathinfo($this->fileAbsPath, PATHINFO_DIRNAME);
 
         if ( ! is_dir($dirName)) {
@@ -601,11 +670,23 @@ class Markdown
 
         file_put_contents($this->fileAbsPath, $this->content);
 
+        $cacheDir = $this->app->getCacheDirAbsPath().'docs/';
+
+        if ( ! is_dir($cacheDir)) {
+            mkdir($cacheDir, 0700, true);
+        }
+
+        file_put_contents($cacheDir.$this->name, $this->app->getSessionId());
+
         return $this;
     }
 
     public function delete()
     {
+        if ($this->locked) {
+            return false;
+        }
+
         if ($this->exists) {
             @unlink($this->fileAbsPath);
 
@@ -623,6 +704,16 @@ class Markdown
 
     public function getUrl()
     {
-        return $this->app['url.base'].'/'.$this->filePath;
+        return $this->app->getUrl().$this->filePath;
+    }
+
+    public function isNotLocked()
+    {
+        return $this->locked === false;
+    }
+
+    public function isLocked()
+    {
+        return $this->locked;
     }
 }

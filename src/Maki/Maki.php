@@ -69,7 +69,7 @@ class Maki extends \Pimple
         }
 
         // Normalize base url
-        $this['url.base'] = '/'.trim($this['url.base'], '/').'/';
+        $this['url.base'] = str_replace('//', '/', '/'.trim($this['url.base'], '/').'/');
 
         if ( ! $this->offsetExists('editable')) {
             $this['editable'] = true;

@@ -1,4 +1,5 @@
 /.maki_cache
+/_maki_cache
 /vendor
 /composer.lock
 /maki.sublime-project

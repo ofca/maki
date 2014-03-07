@@ -15,6 +15,21 @@ class Maki extends \Pimple
         session_start();
         $this->sessionId = session_id();
 
+        if ( ! isset($values['docroot'])) {
+            throw new \InvalidaArgumentException(sprintf('`docroot` is not defined.'));
+        }
+
+        // Normalize path
+        $values['docroot'] = rtrim($values['docroot'], '/').'/';
+
+        // Look for config file
+        if (is_file($values['docroot'].'maki-config.json')) {
+            $config = file_get_contents($values['docroot'].'maki-config.json');
+            $config = json_decode($config, true);
+
+            $values = array_merge($values, $config);
+        }
+
         parent::__construct($values);
 
         // Define default markdown parser
@@ -25,10 +40,6 @@ class Maki extends \Pimple
                 
                 return $markdown;
             });
-        }
-
-        if ( ! $this->offsetExists('docroot')) {
-            throw new \InvalidaArgumentException(sprintf('`docroot` is not defined.'));
         }
 
         // Markdown files directory

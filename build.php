@@ -6,8 +6,9 @@ ini_set('display_errors', 'On');
 date_default_timezone_set('Europe/Warsaw');
 
 $files = array(
-    'vendor/michelf/php-markdown/Michelf/MarkdownInterface.php',    
+    'vendor/michelf/php-markdown/Michelf/MarkdownInterface.php',
     'vendor/michelf/php-markdown/Michelf/Markdown.php',
+    'vendor/michelf/php-markdown/Michelf/MarkdownExtra.php',
     'vendor/pimple/pimple/lib/Pimple.php',
     'src/Maki/Markdown.php',
     'src/Maki/File/Markdown.php',

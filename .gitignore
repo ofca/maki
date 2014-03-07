@@ -5,3 +5,6 @@
 /maki.sublime-project
 /maki.sublime-workspace
 /test.md
+/dist/docs
+/dist/.htaccess
+/dist/_maki_cache

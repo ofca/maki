@@ -9,7 +9,8 @@
     # Redirect Trailing Slashes...
     RewriteRule ^(.*)/$ /$1 [L,R=301]
 
-    RewriteCond %{REQUEST_FILENAME} \.(md|markdown)$
+    # Do not allow displaying markdown files directly
+    RewriteCond %{REQUEST_FILENAME} \.(md)$
     RewriteRule ^ index.php [L]
 
     # Handle Front Controller...

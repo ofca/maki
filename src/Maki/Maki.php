@@ -30,6 +30,17 @@ class Maki extends \Pimple
             $values = array_merge($values, $config);
         }
 
+        // Theme css
+        if ( ! isset($values['theme.css'])) {
+            $values['theme.css'] = array();
+        }
+
+        if ( ! is_array($values['theme.css'])) {
+            $values['theme.css'] = array($values['theme.css']);
+        }
+
+        $values['theme.css']['default'] = '?resource=css';
+
         parent::__construct($values);
 
         // Define default markdown parser
@@ -95,8 +106,16 @@ class Maki extends \Pimple
         // Normalize path
         $this['cache_dir'] = rtrim($this['cache_dir'], '/').'/';
 
-        if ( ! $this->offsetExists('theme.css')) {
-            $this['theme.css'] = false;
+        if ( ! $this->offsetExists('theme.default_css')) {
+            $this['theme.default_css'] = 'default';
+        }
+
+        if (isset($_COOKIE['theme_css'])) {
+            $themes = $this['theme.css'];
+
+            if (isset($themes[$_COOKIE['theme_css']])) {
+                $this['theme.default_css'] = $_COOKIE['theme_css'];
+            }
         }
 
         // Create htaccess if not exists yet
@@ -111,6 +130,17 @@ class Maki extends \Pimple
         // Create cache dir
         if ( ! is_dir($this->getCacheDirAbsPath())) {
             mkdir($this->getCacheDirAbsPath(), 0700, true);
+        }
+
+        if (isset($_GET['change_css'])) {
+            $name = $_GET['change_css'];
+
+            if (preg_match('/^[-_a-z0-9]+$/', $name)) {
+                setcookie('theme_css', $name, time()+2678400, '/'); // 31 days
+            }
+
+            header('Location: '.$this->getUrl().$this->getCurrentUrl());
+            exit;
         }
 
         $url = $this->getCurrentUrl();
@@ -246,7 +276,7 @@ class Maki extends \Pimple
     RewriteRule ^(.*)/$ /$1 [L,R=301]
 
     # Do not allow displaying markdown files directly
-    RewriteCond %{REQUEST_FILENAME} !\.('.implode('|', array_keys($this['docs.extensions'])).')$
+    RewriteCond %{REQUEST_FILENAME} \.('.implode('|', array_keys($this['docs.extensions'])).')$
     RewriteRule ^ index.php [L]
 
     # Handle Front Controller...
@@ -268,10 +298,13 @@ class Maki extends \Pimple
 
     public function defaultTheme()
     {
+        $url = $this->getUrl();
         $editable = $this['editable'];
         $viewable = $this['viewable'];
         $editButton = ( ! $editable and $viewable) ? 'view source' : 'edit';
-        
+        $css = $this['theme.css'];
+        $defaultCss = $this['theme.default_css'];
+
         ?>
 <!DOCTYPE html>
 <html>
@@ -279,14 +312,23 @@ class Maki extends \Pimple
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <?php echo Theme::getBootstrap() ?>
+        <link href='<?php echo $url ?>?resource=bootstrap' rel='stylesheet'>
+        <link href='<?php echo $url.$css[$defaultCss] ?>' rel='stylesheet'>
         <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,800&subset=latin,latin-ext' rel='stylesheet' type='text/css'>        
-        <?php echo Theme::getJQuery() ?>
-        <?php echo Theme::getPrism() ?>
-        <?php echo $this['theme.css'] === false ? Theme::getCSS() : sprintf('<link href="%s" rel="stylesheet">', $this['theme.css']) ?>
+        <script src='<?php echo $url ?>?resource=jquery'></script>
+        <script src='<?php echo $url ?>?resource=prism-js'></script>
     </head>
     <body>
         <div class='container page-container'>
+            <?php if (count($css) > 1): ?>
+                <div class='themes'>
+                    <select>
+                        <?php foreach ($css as $name => $item): ?>
+                            <option value='<?php echo $name ?>' <?php echo $name == $defaultCss ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
+                        <?php endforeach ?>
+                    </select>
+                </div>
+            <?php endif ?>
             <header class='row main-header'>
                 <h1 class='header-title'><a href='<?php echo $this->getUrl() ?>'><?php echo $this['title'] ?></a></h1>
                 <span class='header-subtitle'><?php echo $this['subtitle'] ?></span>
@@ -403,6 +445,10 @@ class Maki extends \Pimple
             });
 
             Prism.highlightAll();
+
+            $('.themes > select').on('change', function() {
+                window.location = '<?php $this->getCurrentUrl() ?>?change_css='+this.value;
+            });
         </script>
     </body>
 </html>

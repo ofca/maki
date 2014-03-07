@@ -2,7 +2,7 @@
 
 namespace Maki;
 
-class Markdown extends \Michelf\MarkdownExtra
+class Markdown extends \Michelf\_MarkdownExtra_TmpImpl
 {
     public $baseUrl;
 

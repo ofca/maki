@@ -8,3 +8,4 @@
 /dist/docs
 /dist/.htaccess
 /dist/_maki_cache
+/dist/error.log

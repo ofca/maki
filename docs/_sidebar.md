@@ -10,5 +10,6 @@
 
 * Examples
 
-    * [Table](examples/table.md)
+    * [Table](examples/table.md "Tables")
     * [Code](examples/code.md)
+    * [google](http://google.com)

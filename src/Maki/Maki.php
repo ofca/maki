@@ -246,7 +246,7 @@ class Maki extends \Pimple
     RewriteRule ^(.*)/$ /$1 [L,R=301]
 
     # Do not allow displaying markdown files directly
-    RewriteCond %{REQUEST_FILENAME} !\.('.implode('|', $this['docs.extensions']).')$
+    RewriteCond %{REQUEST_FILENAME} !\.('.implode('|', array_keys($this['docs.extensions'])).')$
     RewriteRule ^ index.php [L]
 
     # Handle Front Controller...

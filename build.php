@@ -1,12 +1,14 @@
 <?php
 
+error_reporting(E_ALL);
+ini_set('display_errors', 'On');
+
 date_default_timezone_set('Europe/Warsaw');
 
 $files = array(
-    'vendor/pimple/pimple/lib/Pimple.php',
     'vendor/michelf/php-markdown/Michelf/MarkdownInterface.php',    
     'vendor/michelf/php-markdown/Michelf/Markdown.php',
-    'vendor/michelf/php-markdown/Michelf/MarkdownExtra.php',
+    'vendor/pimple/pimple/lib/Pimple.php',
     'src/Maki/Markdown.php',
     'src/Maki/File/Markdown.php',
     'src/Maki/Theme.php',        
@@ -17,7 +19,9 @@ $files = array(
 $output = array();
 
 foreach ($files as $file) {
-     $content = file_get_contents($file);
+     //$content = file_get_contents($file);
+     $handle = fopen($file, 'r');
+     $content = fread($handle, filesize($file));
      $content = process($content, $file);
 
      $output[$file] = $content;
@@ -60,7 +64,7 @@ function process($content, $file)
         $content = "\n\nnamespace {\n\n".$content."\n\n}\n\n";
     } else {
         // Markdown classes have closing tags (why, tell me why?!)
-        if (strpos($file, 'Michelf') !== false) {
+        if (strpos($file, 'Michelf/MarkdownInterface.php') !== false) {
             $content = preg_replace('/\?>/', '', $content, 1);
         }
 

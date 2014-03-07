@@ -4,225 +4,9 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://darkcinnamon.com/maki
  *
- * Compiled at: Friday 7th of March 2014 11:38:10 AM
+ * Compiled at: Friday 7th of March 2014 04:17:24 PM
  * Created by: Tomasz "ofca" Zeludziewicz <tomek@darkcinnamon.com>
  */
-
-
-
-namespace {
-error_reporting(E_ALL);
-ini_set('display_errors', 'On');
-// vendor/pimple/pimple/lib/Pimple.php
-
-
-
-/*
- * This file is part of Pimple.
- *
- * Copyright (c) 2009 Fabien Potencier
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is furnished
- * to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
-
-/**
- * Pimple main class.
- *
- * @package pimple
- * @author  Fabien Potencier
- */
-class Pimple implements ArrayAccess
-{
-    protected $values = array();
-
-    /**
-     * Instantiate the container.
-     *
-     * Objects and parameters can be passed as argument to the constructor.
-     *
-     * @param array $values The parameters or objects.
-     */
-    public function __construct (array $values = array())
-    {
-        $this->values = $values;
-    }
-
-    /**
-     * Sets a parameter or an object.
-     *
-     * Objects must be defined as Closures.
-     *
-     * Allowing any PHP callable leads to difficult to debug problems
-     * as function names (strings) are callable (creating a function with
-     * the same a name as an existing parameter would break your container).
-     *
-     * @param string $id    The unique identifier for the parameter or object
-     * @param mixed  $value The value of the parameter or a closure to defined an object
-     */
-    public function offsetSet($id, $value)
-    {
-        $this->values[$id] = $value;
-    }
-
-    /**
-     * Gets a parameter or an object.
-     *
-     * @param string $id The unique identifier for the parameter or object
-     *
-     * @return mixed The value of the parameter or an object
-     *
-     * @throws InvalidArgumentException if the identifier is not defined
-     */
-    public function offsetGet($id)
-    {
-        if (!array_key_exists($id, $this->values)) {
-            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
-        }
-
-        $isFactory = is_object($this->values[$id]) && method_exists($this->values[$id], '__invoke');
-
-        return $isFactory ? $this->values[$id]($this) : $this->values[$id];
-    }
-
-    /**
-     * Checks if a parameter or an object is set.
-     *
-     * @param string $id The unique identifier for the parameter or object
-     *
-     * @return Boolean
-     */
-    public function offsetExists($id)
-    {
-        return array_key_exists($id, $this->values);
-    }
-
-    /**
-     * Unsets a parameter or an object.
-     *
-     * @param string $id The unique identifier for the parameter or object
-     */
-    public function offsetUnset($id)
-    {
-        unset($this->values[$id]);
-    }
-
-    /**
-     * Returns a closure that stores the result of the given closure for
-     * uniqueness in the scope of this instance of Pimple.
-     *
-     * @param Closure $callable A closure to wrap for uniqueness
-     *
-     * @return Closure The wrapped closure
-     */
-    public static function share(Closure $callable)
-    {
-        return function ($c) use ($callable) {
-            static $object;
-
-            if (null === $object) {
-                $object = $callable($c);
-            }
-
-            return $object;
-        };
-    }
-
-    /**
-     * Protects a callable from being interpreted as a service.
-     *
-     * This is useful when you want to store a callable as a parameter.
-     *
-     * @param Closure $callable A closure to protect from being evaluated
-     *
-     * @return Closure The protected closure
-     */
-    public static function protect(Closure $callable)
-    {
-        return function ($c) use ($callable) {
-            return $callable;
-        };
-    }
-
-    /**
-     * Gets a parameter or the closure defining an object.
-     *
-     * @param string $id The unique identifier for the parameter or object
-     *
-     * @return mixed The value of the parameter or the closure defining an object
-     *
-     * @throws InvalidArgumentException if the identifier is not defined
-     */
-    public function raw($id)
-    {
-        if (!array_key_exists($id, $this->values)) {
-            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
-        }
-
-        return $this->values[$id];
-    }
-
-    /**
-     * Extends an object definition.
-     *
-     * Useful when you want to extend an existing object definition,
-     * without necessarily loading that object.
-     *
-     * @param string  $id       The unique identifier for the object
-     * @param Closure $callable A closure to extend the original
-     *
-     * @return Closure The wrapped closure
-     *
-     * @throws InvalidArgumentException if the identifier is not defined
-     */
-    public function extend($id, Closure $callable)
-    {
-        if (!array_key_exists($id, $this->values)) {
-            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
-        }
-
-        $factory = $this->values[$id];
-
-        if (!($factory instanceof Closure)) {
-            throw new InvalidArgumentException(sprintf('Identifier "%s" does not contain an object definition.', $id));
-        }
-
-        return $this->values[$id] = function ($c) use ($callable, $factory) {
-            return $callable($factory($c), $c);
-        };
-    }
-
-    /**
-     * Returns all defined value names.
-     *
-     * @return array An array of value names
-     */
-    public function keys()
-    {
-        return array_keys($this->values);
-    }
-}
-
-
-}
-
-
-
 
 // vendor/michelf/php-markdown/Michelf/MarkdownInterface.php
 
@@ -356,7 +140,7 @@ class Markdown implements MarkdownInterface {
 		$this->prepareItalicsAndBold();
 	
 		$this->nested_brackets_re = 
-			str_repeat('([^\[\]]+|\[', $this->nested_brackets_depth).
+			str_repeat('(?>[^\[\]]+|\[', $this->nested_brackets_depth).
 			str_repeat('\])*', $this->nested_brackets_depth);
 	
 		$this->nested_url_parenthesis_re = 
@@ -3384,46 +3168,214 @@ abstract class _MarkdownExtra_TmpImpl extends \Michelf\Markdown {
 
 
 
-// vendor/michelf/php-markdown/Michelf/MarkdownExtra.php
 
 
-#
-# Markdown Extra  -  A text-to-HTML conversion tool for web writers
-#
-# PHP Markdown Extra
-# Copyright (c) 2004-2013 Michel Fortin  
-# <http://michelf.com/projects/php-markdown/>
-#
-# Original Markdown
-# Copyright (c) 2004-2006 John Gruber  
-# <http://daringfireball.net/projects/markdown/>
-#
-namespace Michelf {
+namespace {
+
+// vendor/pimple/pimple/lib/Pimple.php
 
 
-# Just force Michelf/Markdown.php to load. This is needed to load
-# the temporary implementation class. See below for details.
-\Michelf\Markdown::MARKDOWNLIB_VERSION;
 
-#
-# Markdown Extra Parser Class
-#
-# Note: Currently the implementation resides in the temporary class
-# \Michelf\MarkdownExtra_TmpImpl (in the same file as \Michelf\Markdown).
-# This makes it easier to propagate the changes between the three different
-# packaging styles of PHP Markdown. Once this issue is resolved, the
-# _MarkdownExtra_TmpImpl will disappear and this one will contain the code.
-#
+/*
+ * This file is part of Pimple.
+ *
+ * Copyright (c) 2009 Fabien Potencier
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is furnished
+ * to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 
-class MarkdownExtra extends \Michelf\_MarkdownExtra_TmpImpl {
+/**
+ * Pimple main class.
+ *
+ * @package pimple
+ * @author  Fabien Potencier
+ */
+class Pimple implements ArrayAccess
+{
+    protected $values = array();
 
-	### Parser Implementation ###
+    /**
+     * Instantiate the container.
+     *
+     * Objects and parameters can be passed as argument to the constructor.
+     *
+     * @param array $values The parameters or objects.
+     */
+    public function __construct (array $values = array())
+    {
+        $this->values = $values;
+    }
 
-	# Temporarily, the implemenation is in the _MarkdownExtra_TmpImpl class.
-	# See note above.
+    /**
+     * Sets a parameter or an object.
+     *
+     * Objects must be defined as Closures.
+     *
+     * Allowing any PHP callable leads to difficult to debug problems
+     * as function names (strings) are callable (creating a function with
+     * the same a name as an existing parameter would break your container).
+     *
+     * @param string $id    The unique identifier for the parameter or object
+     * @param mixed  $value The value of the parameter or a closure to defined an object
+     */
+    public function offsetSet($id, $value)
+    {
+        $this->values[$id] = $value;
+    }
 
+    /**
+     * Gets a parameter or an object.
+     *
+     * @param string $id The unique identifier for the parameter or object
+     *
+     * @return mixed The value of the parameter or an object
+     *
+     * @throws InvalidArgumentException if the identifier is not defined
+     */
+    public function offsetGet($id)
+    {
+        if (!array_key_exists($id, $this->values)) {
+            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
+        }
+
+        $isFactory = is_object($this->values[$id]) && method_exists($this->values[$id], '__invoke');
+
+        return $isFactory ? $this->values[$id]($this) : $this->values[$id];
+    }
+
+    /**
+     * Checks if a parameter or an object is set.
+     *
+     * @param string $id The unique identifier for the parameter or object
+     *
+     * @return Boolean
+     */
+    public function offsetExists($id)
+    {
+        return array_key_exists($id, $this->values);
+    }
+
+    /**
+     * Unsets a parameter or an object.
+     *
+     * @param string $id The unique identifier for the parameter or object
+     */
+    public function offsetUnset($id)
+    {
+        unset($this->values[$id]);
+    }
+
+    /**
+     * Returns a closure that stores the result of the given closure for
+     * uniqueness in the scope of this instance of Pimple.
+     *
+     * @param Closure $callable A closure to wrap for uniqueness
+     *
+     * @return Closure The wrapped closure
+     */
+    public static function share(Closure $callable)
+    {
+        return function ($c) use ($callable) {
+            static $object;
+
+            if (null === $object) {
+                $object = $callable($c);
+            }
+
+            return $object;
+        };
+    }
+
+    /**
+     * Protects a callable from being interpreted as a service.
+     *
+     * This is useful when you want to store a callable as a parameter.
+     *
+     * @param Closure $callable A closure to protect from being evaluated
+     *
+     * @return Closure The protected closure
+     */
+    public static function protect(Closure $callable)
+    {
+        return function ($c) use ($callable) {
+            return $callable;
+        };
+    }
+
+    /**
+     * Gets a parameter or the closure defining an object.
+     *
+     * @param string $id The unique identifier for the parameter or object
+     *
+     * @return mixed The value of the parameter or the closure defining an object
+     *
+     * @throws InvalidArgumentException if the identifier is not defined
+     */
+    public function raw($id)
+    {
+        if (!array_key_exists($id, $this->values)) {
+            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
+        }
+
+        return $this->values[$id];
+    }
+
+    /**
+     * Extends an object definition.
+     *
+     * Useful when you want to extend an existing object definition,
+     * without necessarily loading that object.
+     *
+     * @param string  $id       The unique identifier for the object
+     * @param Closure $callable A closure to extend the original
+     *
+     * @return Closure The wrapped closure
+     *
+     * @throws InvalidArgumentException if the identifier is not defined
+     */
+    public function extend($id, Closure $callable)
+    {
+        if (!array_key_exists($id, $this->values)) {
+            throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
+        }
+
+        $factory = $this->values[$id];
+
+        if (!($factory instanceof Closure)) {
+            throw new InvalidArgumentException(sprintf('Identifier "%s" does not contain an object definition.', $id));
+        }
+
+        return $this->values[$id] = function ($c) use ($callable, $factory) {
+            return $callable($factory($c), $c);
+        };
+    }
+
+    /**
+     * Returns all defined value names.
+     *
+     * @return array An array of value names
+     */
+    public function keys()
+    {
+        return array_keys($this->values);
+    }
 }
-
 
 
 }
@@ -3437,7 +3389,7 @@ class MarkdownExtra extends \Michelf\_MarkdownExtra_TmpImpl {
 
 namespace Maki {
 
-class Markdown extends \Michelf\MarkdownExtra
+class Markdown extends \Michelf\_MarkdownExtra_TmpImpl
 {
     public $baseUrl;
 
@@ -4048,6 +4000,21 @@ class Maki extends \Pimple
         session_start();
         $this->sessionId = session_id();
 
+        if ( ! isset($values['docroot'])) {
+            throw new \InvalidaArgumentException(sprintf('`docroot` is not defined.'));
+        }
+
+        // Normalize path
+        $values['docroot'] = rtrim($values['docroot'], '/').'/';
+
+        // Look for config file
+        if (is_file($values['docroot'].'maki-config.json')) {
+            $config = file_get_contents($values['docroot'].'maki-config.json');
+            $config = json_decode($config, true);
+
+            $values = array_merge($values, $config);
+        }
+
         parent::__construct($values);
 
         // Define default markdown parser
@@ -4058,10 +4025,6 @@ class Maki extends \Pimple
                 
                 return $markdown;
             });
-        }
-
-        if ( ! $this->offsetExists('docroot')) {
-            throw new \InvalidaArgumentException(sprintf('`docroot` is not defined.'));
         }
 
         // Markdown files directory
@@ -4268,7 +4231,7 @@ class Maki extends \Pimple
     RewriteRule ^(.*)/$ /$1 [L,R=301]
 
     # Do not allow displaying markdown files directly
-    RewriteCond %{REQUEST_FILENAME} !\.('.implode('|', $this['docs.extensions']).')$
+    RewriteCond %{REQUEST_FILENAME} !\.('.implode('|', array_keys($this['docs.extensions'])).')$
     RewriteRule ^ index.php [L]
 
     # Handle Front Controller...
@@ -4443,21 +4406,11 @@ class Maki extends \Pimple
 
 
 namespace {
-
     
 
-
     $app = new \Maki\Maki(array(
-        'docroot'   => __DIR__.DIRECTORY_SEPARATOR,
-        'docs.path' => 'docs/',
-        'editable'  => true
+        'docroot'   => __DIR__.DIRECTORY_SEPARATOR
     ));
 
-    /*
-    if (file_exists(DOCROOT.'maki-config.json')) {
-        $app->setConfig(file_get_contents(DOCROOT.'maki-config.json'));
-    }
-    */
     echo $app->render();
-
 }

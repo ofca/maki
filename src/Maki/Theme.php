@@ -43,6 +43,12 @@ class Theme {
         border-color: #555;
     }
 
+    blockquote {
+        margin: 20px;
+        border-left: 5px solid #4B4B4B;
+        font-style: italic;
+    }
+
     table {
         width: 100%;
     }

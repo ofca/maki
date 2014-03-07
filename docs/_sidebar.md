@@ -10,6 +10,6 @@
 
 * Examples
 
-    * [Table](examples/table.md "Tables")
+    * [Table](examples/table.md)
     * [Code](examples/code.md)
-    * [google](http://google.com)
+    * [Full page](examples/full-page.md)

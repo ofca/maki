@@ -74,7 +74,7 @@ class Markdown
         if ($this->breadcrumb === null) {
             $content = $this->getContent();
 
-            preg_match('/<\!\-\-\-\s*@breadcrumb:([^(?:\-\->)]*)/', $content, $match);
+            preg_match('/<\!\-\-\-\s*@breadcrumb:(.*)?\-\->/', $content, $match);
 
             if ( ! isset($match[1])) {
                 $this->breadcrumb = array(array(

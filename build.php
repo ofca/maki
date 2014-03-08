@@ -12,7 +12,7 @@ $files = array(
     'vendor/pimple/pimple/lib/Pimple.php',
     'src/Maki/Markdown.php',
     'src/Maki/File/Markdown.php',
-    'src/Maki/Theme.php',        
+    'src/Maki/ThemeManager.php',        
     'src/Maki/Maki.php',
     'index.php'
 );
@@ -44,6 +44,8 @@ $info = <<<EOF
  * Created by: Tomasz "ofca" Zeludziewicz <tomek@darkcinnamon.com>
  */
 
+define('MAKI_SINGLE_FILE', true);
+
 
 EOF;
 
@@ -73,6 +75,18 @@ function process($content, $file)
             // Because Pimple is in global scope we need to change
             // namespace syntax for every file.
             $content = preg_replace('/(namespace ([^;]+);)/', 'namespace $2 {', $content, 1)."\n\n}\n\n";
+        }
+
+        if ($file == 'src/Maki/ThemeManager.php') {
+            $css = array();
+
+            foreach (new \DirectoryIterator('themes') as $file) {
+                if ($file->getExtension() == 'css') {
+                    $css[] = "'".$file->getBasename('.css')."' => <<<EOF\n".file_get_contents('themes/'.$file->getFilename())."\nEOF";
+                }
+            }
+
+            $content = str_replace('/* @@@:themes_css */', implode(",\n", $css), $content);
         }
     }
 

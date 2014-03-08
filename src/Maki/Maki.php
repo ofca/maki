@@ -9,39 +9,39 @@ class Maki extends \Pimple
     protected $sidebar;
     protected $page;
     protected $sessionId;
+    protected $themeManager;
 
     public function __construct(array $values = array())
     {
         session_start();
         $this->sessionId = session_id();
 
+        // Document root path must be defined
         if ( ! isset($values['docroot'])) {
-            throw new \InvalidaArgumentException(sprintf('`docroot` is not defined.'));
+            throw new \InvalidaArgumentException('`docroot` is not defined.');
         }
 
         // Normalize path
-        $values['docroot'] = rtrim($values['docroot'], '/').'/';
+        $this['docroot'] = rtrim($values['docroot'], '/').'/';
+        unset($values['docroot']);
+
+        // Create htaccess if needed
+        $this->createHtAccess();
 
         // Look for config file
-        if (is_file($values['docroot'].'maki-config.json')) {
-            $config = file_get_contents($values['docroot'].'maki-config.json');
-            $config = json_decode($config, true);
+        $values = array_merge($values, $this->loadConfigFile());
 
-            $values = array_merge($values, $config);
+        $this->themeManager = new \Maki\ThemeManager($this);
+
+        if (isset($values['theme.css'])) {
+            $this->themeManager->addStylesheets($values['theme.css']);
+            unset($values['theme.css']);
         }
 
-        // Theme css
-        if ( ! isset($values['theme.css'])) {
-            $values['theme.css'] = array();
-        }
+        $this->values = array_merge($this->values, $values);
 
-        if ( ! is_array($values['theme.css'])) {
-            $values['theme.css'] = array($values['theme.css']);
-        }
-
-        $values['theme.css']['default'] = '?resource=css';
-
-        parent::__construct($values);
+        // Before do anything serve css/js files
+        $this->handleResourceRequest();
 
         // Define default markdown parser
         if ( ! $this->offsetExists('parser.markdown')) {
@@ -91,42 +91,13 @@ class Maki extends \Pimple
             $this['viewable'] = true;
         }
 
-        if ( ! $this->offsetExists('title')) {
-            $this['title'] = '<strong>ma</strong>ki';
-        }
-
-        if ( ! $this->offsetExists('subtitle')) {
-            $this['subtitle'] = 'SIMPLE <strong>MA</strong>RKDOWN WI<strong>KI</strong>';
-        }
-
         if ( ! $this->offsetExists('cache_dir')) {
             $this['cache_dir'] = '_maki_cache';
         }
 
         // Normalize path
         $this['cache_dir'] = rtrim($this['cache_dir'], '/').'/';
-
-        if ( ! $this->offsetExists('theme.default_css')) {
-            $this['theme.default_css'] = 'default';
-        }
-
-        if (isset($_COOKIE['theme_css'])) {
-            $themes = $this['theme.css'];
-
-            if (isset($themes[$_COOKIE['theme_css']])) {
-                $this['theme.default_css'] = $_COOKIE['theme_css'];
-            }
-        }
-
-        // Create htaccess if not exists yet
-        if ( ! is_file($this['docroot'].'.htaccess')) {
-            $this->createHtAccess();
-
-            header('HTTP/1.1 302 Moved Temporarily');
-            header('Location: '.$this->getUrl());
-            exit;
-        }
-
+      
         // Create cache dir
         if ( ! is_dir($this->getCacheDirAbsPath())) {
             mkdir($this->getCacheDirAbsPath(), 0700, true);
@@ -171,6 +142,72 @@ class Maki extends \Pimple
         }
     }
 
+    public function handleResourceRequest()
+    {
+        if (isset($_GET['resource'])) {
+
+            $resource = $_GET['resource'];
+            $info = pathinfo($resource);
+            $theme = new \Maki\ThemeManager($this);
+
+            if ( ! isset($info['extension'])) {
+                $this->responseFileNotFound();
+            }
+
+            if ($info['extension'] == 'css') {
+                if ($info['filename'] == 'bootstrap') {
+                    $body = $theme->getBootstrap();
+                } else {
+                    try {
+                        $body = $theme->getStylesheet($info['filename']);
+                    } catch (\InvalidArgumentException $e) {
+                        $this->responseFileNotFound($e->getMessage());
+                    }
+                }
+
+                $this->response($body, 'text/css');
+            }
+
+            if ($info['extension'] == 'js') {
+                switch ($info['filename']) {
+                    case 'jquery': $body = $theme->getJQuery(); break;
+                    case 'prism': $body = $theme->getPrism(); break;
+                }
+
+                $this->response($body, 'application/javascript');
+            }
+        }
+    }
+
+    public function loadConfigFile()
+    {
+        if (is_file($this['docroot'].'maki-config.json')) {
+            $config = file_get_contents($this['docroot'].'maki-config.json');
+            return json_decode($config, true);
+        }
+
+        return array();
+    }
+
+    public function response($body, $type = 'text/html', $code = 200)
+    {
+        switch ($code) {
+            case 200: header('HTTP/1.1 200 OK'); break;
+            case 404: header('HTTP/1.1 404 Not Found'); break;
+        }
+
+        header('Content-Type: '.$type);
+
+        echo $body;
+
+        exit(0);
+    }
+
+    public function responseFileNotFound($text = 'File not found')
+    {
+        $this->response($text, 'text/plain', 404);
+    }
+
     public function getCurrentUrl()
     {
         if ($this->url === null) {
@@ -212,12 +249,14 @@ class Maki extends \Pimple
 
     public function redirect($url, $permanent = false)
     {
-        if($permanent) {
+        if ($permanent) {
             header('HTTP/1.1 301 Moved Permanently');
+        } else {
+            header('HTTP/1.1 302 Moved Temporarily');
         }
 
         header('Location: '.$url);
-        exit();
+        exit(0);
     }
 
     public function findIndexFile($directory)
@@ -264,7 +303,9 @@ class Maki extends \Pimple
 
     public function createHtAccess()
     {
-        file_put_contents($this['docroot'].'.htaccess', '<IfModule mod_rewrite.c>
+        // Create htaccess if not exists yet
+        if ( ! is_file($this['docroot'].'.htaccess')) {
+            file_put_contents($this['docroot'].'.htaccess', '<IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews
     </IfModule>
@@ -284,6 +325,10 @@ class Maki extends \Pimple
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>');
+
+            $this->redirect($this->getUrl(), false);
+        }
+        
     }
 
     public function render()
@@ -298,12 +343,12 @@ class Maki extends \Pimple
 
     public function defaultTheme()
     {
+        $theme = $this->themeManager;
         $url = $this->getUrl();
         $editable = $this['editable'];
         $viewable = $this['viewable'];
         $editButton = ( ! $editable and $viewable) ? 'view source' : 'edit';
-        $css = $this['theme.css'];
-        $defaultCss = $this['theme.default_css'];
+        $activeCss = $theme->getActiveStylesheetName();
 
         ?>
 <!DOCTYPE html>
@@ -312,29 +357,23 @@ class Maki extends \Pimple
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href='<?php echo $url ?>?resource=bootstrap' rel='stylesheet'>
-        <link href='<?php echo $url.$css[$defaultCss] ?>' rel='stylesheet'>
-        <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,800&subset=latin,latin-ext' rel='stylesheet' type='text/css'>        
-        <script src='<?php echo $url ?>?resource=jquery'></script>
-        <script src='<?php echo $url ?>?resource=prism-js'></script>
+        <link href='<?php echo $url ?>?resource=bootstrap.css' rel='stylesheet'>
+        <link href='<?php echo $theme->getStylesheetLink() ?>' rel='stylesheet'>      
+        <script src='<?php echo $url ?>?resource=jquery.js'></script>
+        <script src='<?php echo $url ?>?resource=prism.js'></script>
     </head>
     <body>
         <div class='container page-container'>
-            <?php if (count($css) > 1): ?>
-                <div class='themes'>
-                    <select>
-                        <?php foreach ($css as $name => $item): ?>
-                            <option value='<?php echo $name ?>' <?php echo $name == $defaultCss ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
-                        <?php endforeach ?>
-                    </select>
-                </div>
-            <?php endif ?>
-            <header class='row main-header'>
-                <h1 class='header-title'><a href='<?php echo $this->getUrl() ?>'><?php echo $this['title'] ?></a></h1>
-                <span class='header-subtitle'><?php echo $this['subtitle'] ?></span>
-            </header>
+            <div class='themes'>
+                <select>
+                    <?php foreach ($theme->getStylesheets() as $name => $url): ?>
+                        <option value='<?php echo $name ?>' <?php echo $name == $activeCss ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
+                    <?php endforeach ?>
+                </select>
+            </div>
+            
             <div class='row'>
-                <div class='col-md-3 sidebar'>
+                <div class='col-xs-12 col-sm-3 sidebar'>
                     <div class='sidebar-inner'>
                         <?php echo $this->sidebar->toHTML() ?>
                         <?php if ($editable or $viewable): ?>
@@ -344,7 +383,7 @@ class Maki extends \Pimple
                         <?php endif ?>
                     </div>
                 </div>
-                <div class='col-md-9 content'>
+                <div class='col-xs-12 col-sm-9 content'>
                     <ol class="breadcrumb">
                         <?php foreach ($this->page->getBreadcrumb() as $link): ?>
                             <li <?php echo $link['active'] ? 'class="active"' : '' ?>>

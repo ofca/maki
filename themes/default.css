@@ -1,23 +1,44 @@
-.page-container { 
-    position: relative; 
+@import url(http://fonts.googleapis.com/css?family=Open+Sans:400italic,700italic,400,700&subset=latin,latin-ext);
+body {
+    background: #303030;
+    font-family: "Open sans";
+    color: #777171;
+    border-top: 33px solid #242424;
 }
 
-/* Themes switcher */
-.themes {
-    position: absolute;
-    right: 10px;
-    top: 6px;
-    z-index: 1;
+h1, h2, h3, h4, h5, h6 {
+    color: #867642;
+    font-weight: 300;
 }
 
-.themes select {
+a {
+    color: #B4893D;
+}
+
+a:hover, a:focus {
+    color: #B4893D;                
+}
+
+code {
     background: transparent;
-    border: 0;
-    cursor: pointer;
-    outline: none;
+    color: #B6A9AC;
 }
-/* --- */
 
+pre {
+    color: #919191;
+    background: #4B4B4B;
+    border: 0;
+}
+
+hr {
+    border-color: #555;
+}
+
+blockquote {
+    margin: 20px;
+    border-left: 5px solid #4B4B4B;
+    font-style: italic;
+}
 
 /* Table */
 table {
@@ -38,19 +59,41 @@ td {
 }
 
 tr:nth-child(5n+2) td, tr:nth-child(5n+2) th {
-    background: #F8F8F8;
+    background: #474747;
     color: #8F8D8D;
+}
+/* --- */
+
+.page-container { 
+    position: relative;
+    margin-top: -33px; 
+}
+
+/* Themes switcher */
+.themes {
+    position: absolute;
+    right: 10px;
+    top: 6px;
+    z-index: 1;
+}
+
+.themes select {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    outline: none;
 }
 /* --- */
 
 
 .content { 
-    background: #fff;
+    background: #3D3D3D; 
+    border-radius: 6px; 
+    box-shadow:         0px 0px 5px 0px rgba(50, 50, 50, 0.15); 
 }
 .content-inner { padding: 20px; }
 
-.sidebar {  }
-.sidebar-inner { padding: 20px; }
+.sidebar-inner { padding: 40px 20px 20px 20px; }
 
 .sidebar ul { list-style: none; margin: 0; }
 .sidebar-inner > ul { padding: 0 0 20px 0; }
@@ -64,14 +107,6 @@ tr:nth-child(5n+2) td, tr:nth-child(5n+2) th {
     margin-top: 10px;
 }
 
-/* Breadcrumb */
-.breadcrumb {
-    background: #FAFAFA;
-    margin: 0 -15px;
-    border-radius: 0;
-    font-size: 12px;
-}
-/* --- */
 
 .page-actions a { margin-left: 5px; }
 
@@ -122,7 +157,13 @@ tr:nth-child(5n+2) td, tr:nth-child(5n+2) th {
     margin-left: 40px;
 }
 
-
+.breadcrumb {
+    background: #464646;
+    margin: 0 -15px;
+    border-radius: 0;
+    font-size: 12px;
+    border-radius: 6px 6px 0 0;
+}
 
 .footer {
     margin-top: 10px;
@@ -143,25 +184,24 @@ tr:nth-child(5n+2) td, tr:nth-child(5n+2) th {
     opacity: .5;
 }
 
+/* PRISM */
 
 /**
- * prism.js default theme for JavaScript, CSS and HTML
- * Based on dabblet (http://dabblet.com)
+ * prism.js Dark theme for JavaScript, CSS and HTML
+ * Based on the slides of the talk â/Reg(exp){2}lained/â
  * @author Lea Verou
  */
 
 code[class*="language-"],
 pre[class*="language-"] {
-    color: black;
-    text-shadow: 0 1px white;
+    color: white;
+    text-shadow: 0 -.1em .2em black;
     font-family: Consolas, Monaco, 'Andale Mono', monospace;
     direction: ltr;
     text-align: left;
     white-space: pre;
     word-spacing: normal;
     word-break: normal;
-    border: 0;
-
 
     -moz-tab-size: 4;
     -o-tab-size: 4;
@@ -171,18 +211,6 @@ pre[class*="language-"] {
     -moz-hyphens: none;
     -ms-hyphens: none;
     hyphens: none;
-}
-
-pre[class*="language-"]::-moz-selection, pre[class*="language-"] ::-moz-selection,
-code[class*="language-"]::-moz-selection, code[class*="language-"] ::-moz-selection {
-    text-shadow: none;
-    background: #fff;
-}
-
-pre[class*="language-"]::selection, pre[class*="language-"] ::selection,
-code[class*="language-"]::selection, code[class*="language-"] ::selection {
-    text-shadow: none;
-    background: #fff;
 }
 
 @media print {
@@ -197,28 +225,26 @@ pre[class*="language-"] {
     padding: 1em;
     margin: .5em 0;
     overflow: auto;
-}
-
-:not(pre) > code[class*="language-"],
-pre[class*="language-"] {
-    background: #fff;
+    border-radius: .5em;
 }
 
 /* Inline code */
 :not(pre) > code[class*="language-"] {
-    padding: .1em;
+    padding: .15em .2em .05em;
     border-radius: .3em;
+    border: .13em solid hsl(30,20%,40%);
+    box-shadow: 1px 1px .3em -.1em black inset;
 }
 
 .token.comment,
 .token.prolog,
 .token.doctype,
 .token.cdata {
-    color: slategray;
+    color: hsl(30,20%,50%);
 }
 
 .token.punctuation {
-    color: #999;
+    opacity: .7;
 }
 
 .namespace {
@@ -231,14 +257,14 @@ pre[class*="language-"] {
 .token.number,
 .token.constant,
 .token.symbol {
-    color: #905;
+    color: hsl(350, 40%, 70%);
 }
 
 .token.selector,
 .token.attr-name,
 .token.string,
 .token.builtin {
-    color: #690;
+    color: hsl(75, 70%, 60%);
 }
 
 .token.operator,
@@ -247,14 +273,13 @@ pre[class*="language-"] {
 .language-css .token.string,
 .style .token.string,
 .token.variable {
-    color: #a67f59;
-    background: hsla(0,0%,100%,.5);
+    color: hsl(40, 90%, 60%);
 }
 
 .token.atrule,
 .token.attr-value,
 .token.keyword {
-    color: #07a;
+    color: hsl(350, 40%, 70%);
 }
 
 

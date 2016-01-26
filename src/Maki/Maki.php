@@ -2,6 +2,19 @@
 
 namespace Maki;
 
+/**
+ * Class Maki
+ * @package Maki
+ * @todo secure maki.json
+ * @todo add {toc} to markodown
+ * @todo better css for headers
+ * @todo editor look&feel
+ * @todo search
+ * @todo page renaming
+ * @todo who made change on page
+ * @todo expandable sections
+ * @todo if page has "." (dot) in name there occurs error "No input file specified"
+ */
 class Maki extends \Pimple
 {
     protected $url;
@@ -678,7 +691,7 @@ class Maki extends \Pimple
                             remember: $remember[0].checked ? 1 : 0
                         },
                         success: function() {
-                            //window.location.reload();
+                            window.location.reload();
                         },
                         error: function(xhr) {
                             $form.find('.username-form-error').remove();

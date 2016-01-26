@@ -6,39 +6,100 @@ class Maki extends \Pimple
 {
     protected $url;
     protected $editing = false;
-    protected $sidebar;
+    protected $nav;
     protected $page;
     protected $sessionId;
     protected $themeManager;
 
-    public function __construct(array $values = array())
+    protected $values = [
+        'main_title'    => null
+    ];
+
+    public function getResource($path)
+    {
+        $func = 'resource_'.md5($path);
+
+        if (function_exists($func)) {
+            return $func();
+        }
+
+        $realpath = realpath($this['docroot'].$path);
+
+        if ($realpath == false or strpos($realpath, $this['docroot']) !== 0) {
+            return false;
+        }
+
+        $ext = pathinfo($realpath, PATHINFO_EXTENSION);
+
+        if ( ! in_array($ext, ['css', 'js'])) {
+            return false;
+        }
+
+        if (is_file($realpath)) {
+            return file_get_contents($realpath);
+        }
+
+        return false;
+    }
+
+    /**
+     * Config:
+     *
+     * - docroot - Document root path (must ends with trailing slash)
+     *
+     * @param array $config
+     * @throws \InvalidArgumentException
+     */
+    public function __construct(array $config = array())
     {
         session_start();
         $this->sessionId = session_id();
+        $config = new Collection($config);
 
         // Document root path must be defined
-        if ( ! isset($values['docroot'])) {
-            throw new \InvalidaArgumentException('`docroot` is not defined.');
+        if ( ! $config->has('docroot')) {
+            throw new \InvalidArgumentException('`docroot` is not defined.');
         }
 
-        // Normalize path
-        $this['docroot'] = rtrim($values['docroot'], '/').'/';
-        unset($values['docroot']);
+        $this['docroot'] = $config->pull('docroot');
 
-        // Create htaccess if needed
+        // Base url
+        $this['url.base'] = $config->pull('url.base') ?: pathinfo($_SERVER['SCRIPT_NAME'], PATHINFO_DIRNAME);
+        $this['url.base'] = str_replace('//', '/', '/'.trim($this['url.base'], '/').'/');
+
+        // Create htaccess as soon as possible (if needed)
         $this->createHtAccess();
 
-        // Look for config file
-        $values = array_merge($values, $this->loadConfigFile());
+        $tm = $this->themeManager = new ThemeManager($this);
 
-        $this->themeManager = new \Maki\ThemeManager($this);
+        // Set default theme
+        $tm->addStylesheet('light', 'resources/light.css');
 
-        if (isset($values['theme.css'])) {
-            $this->themeManager->addStylesheets($values['theme.css']);
-            unset($values['theme.css']);
+        if ($config->has('theme.stylesheets')) {
+            $tm->addStylesheets($config->pull('theme.stylesheets'));
         }
 
-        $this->values = array_merge($this->values, $values);
+        // Set active theme
+        if (isset($_COOKIE['theme_css']) and $tm->isStylesheetExist($_COOKIE['theme_css'])) {
+            $tm->setActiveStylesheet($_COOKIE['theme_css']);
+        } else if ($config->has('theme.active')) {
+            $tm->setActiveStylesheet($config->pull('theme.active'));
+        } else {
+            $tm->setActiveStylesheet('light');
+        }
+
+        // Documentation files extensions
+        $this['docs.extensions'] = $config->pull('docs.extensions') ?: [
+            'md'        => 'markdown',
+            'markdown'  => 'markdown'
+        ];
+
+        $this['cookie.auth_name'] = $config->pull('cookie.auth_name', 'maki');
+        $this['cookie.auth_expire'] = $config->pull('cookie.auth_expire', 3600 * 24 * 30); // 30 days
+        $this['users'] = $config->pull('users', []);
+        $this['salt'] = $config->pull('salt', '');
+
+        $this->values = array_merge($this->values, $config->toArray());
 
         // Before do anything serve css/js files
         $this->handleResourceRequest();
@@ -46,7 +107,7 @@ class Maki extends \Pimple
         // Define default markdown parser
         if ( ! $this->offsetExists('parser.markdown')) {
             $this['parser.markdown'] = $this->share(function($c) {
-                $markdown = new \Maki\Markdown();
+                $markdown = new Markdown();
                 $markdown->baseUrl = $c['url.base'];
                 
                 return $markdown;
@@ -61,27 +122,15 @@ class Maki extends \Pimple
         // Normalize docs.path
         $this['docs.path'] = $this['docs.path'] == '' ? '' : rtrim($this['docs.path'], '/').'/';
 
-        // Documentation files extensions
-        if ( ! $this->offsetExists('docs.extensions')) {
-            $this['docs.extensions'] = array('md' => 'markdown');
-        }
-
         // Index file in directory
-        if ( ! $this->offsetExists('docs.index_name')) {
-            $this['docs.index_name'] = 'index';
+        if ( ! $this->offsetExists('docs.index_filename')) {
+            $this['docs.index_filename'] = 'index';
         }
 
         // Sidebar filename
-        if ( ! $this->offsetExists('docs.sidebar_name')) {
-            $this['docs.sidebar_name'] = '_sidebar';
+        if ( ! $this->offsetExists('docs.navigation_filename')) {
+            $this['docs.navigation_filename'] = '_nav';
         }
-
-        if ( ! $this->offsetExists('url.base')) {
-            $this['url.base'] = pathinfo($_SERVER['SCRIPT_NAME'], PATHINFO_DIRNAME);
-        }
-
-        // Normalize base url
-        $this['url.base'] = str_replace('//', '/', '/'.trim($this['url.base'], '/').'/');
 
         if ( ! $this->offsetExists('editable')) {
             $this['editable'] = true;
@@ -103,13 +152,12 @@ class Maki extends \Pimple
             mkdir($this->getCacheDirAbsPath(), 0700, true);
         }
 
+        $this['user'] = null;
+        $this->checkAuthorization();
+
         if (isset($_GET['change_css'])) {
-            $name = $_GET['change_css'];
-
-            if (preg_match('/^[-_a-z0-9]+$/', $name)) {
-                setcookie('theme_css', $name, time()+2678400, '/'); // 31 days
-            }
-
+            // @todo sanitize (check if this stylesheet exist)
+            setcookie('theme_css', $_GET['change_css'], time()+2592000, '/');
             header('Location: '.$this->getUrl().$this->getCurrentUrl());
             exit;
         }
@@ -118,7 +166,7 @@ class Maki extends \Pimple
         $info = pathinfo($url);
         $dirName = isset($info['dirname']) ? $info['dirname'] : '';
 
-        $this->sidebar = $this->createFileInstance($this->findSidebarFile($dirName));
+        $this->nav = $this->createFileInstance($this->findSidebarFile($dirName));
 
         // No file specified, so default index is taken
         if ( ! isset($info['extension'])) {
@@ -142,57 +190,129 @@ class Maki extends \Pimple
         }
     }
 
+    /**
+     * Check if user is allowed to see wiki.
+     */
+    protected function checkAuthorization()
+    {
+        // Logout
+        if (isset($_GET['logout'])) {
+            $this->deauthorize();
+            $this->redirect($this->getUrl());
+        }
+
+        // If no users defined wiki is public
+        if (!$this['users']) {
+            return;
+        }
+
+        $users = $this['users'];
+
+        // User authorized
+        if (isset($_SESSION['auth'])) {
+            foreach ($users as $user) {
+                if ($user['username'] == $_SESSION['auth']) {
+                    $this['user'] = $user;
+                    return true;
+                }
+            }
+
+            // If user not found on the list it means he/she was logged
+            // but in the meantime someone modified maki's config file.
+            // We logout this user now.
+            $this->deauthorize();
+        }
+
+        // Authorization request
+        if ($_SERVER['REQUEST_METHOD'] == 'POST' and isset($_GET['auth'])) {
+            $username = isset($_POST['username']) ? $_POST['username'] : '';
+            $pass = isset($_POST['password']) ? $_POST['password'] : '';
+            $remember = isset($_POST['remember']) ? $_POST['remember'] : '0';
+
+            foreach ($users as $user) {
+                if ($user['username'] == $username and $user['password'] == $pass) {
+                    $this->authorize($username, $remember == '1');
+                    $this->response();
+                }
+            }
+
+            $this->response(json_encode([
+                'error' => 'Invalid username or password.'
+            ]), 'application/json', 400);
+        }
+
+        $cookieName = $this['cookie.auth_name'];
+
+        if (isset($_COOKIE[$cookieName])) {
+            $token = $_COOKIE[$cookieName];
+
+            if (strlen($token) == 40 and preg_match('/^[0-9a-z]+$/', $token)) {
+                $path = $this['cache_dir'].'users/'.$token;
+
+                if (is_file($path)) {
+                    $username = file_get_contents($path);
+
+                    foreach ($users as $user) {
+                        if ($user['username'] == $username) {
+                            $this->authorize($username);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Display username form
+        $this->response($this->getusernamePageView());
+    }
+
+    protected function authorize($username, $remember = false)
+    {
+        $_SESSION['auth'] = $username;
+
+        if ($remember) {
+            $token = sha1($username.$this['salt']);
+            setcookie($this['cookie.auth_name'], $token, time() + $this['cookie.auth_expire'], '/');
+
+            $path = $this['cache_dir'].'users/';
+            if (!is_dir($path)) {
+                mkdir($path, 0777, true);
+            }
+
+            file_put_contents($path.$token, $username);
+
+            // Garbage collector
+            foreach (scandir($path) as $fileName) {
+                if ($fileName == '.' or $fileName == '..') {
+                    continue;
+                }
+
+                if (filemtime($path.$fileName) < time() - $this['cookie.auth_expire']) {
+                    @unlink($path.$fileName);
+                }
+            }
+        }
+    }
+
+    protected function deauthorize()
+    {
+        session_destroy();
+        unset($_COOKIE[$this['cookie.auth_name']]);
+        setcookie($this['cookie.auth_name'], null, -1, '/');
+    }
+
     public function handleResourceRequest()
     {
         if (isset($_GET['resource'])) {
-
-            $resource = $_GET['resource'];
-            $info = pathinfo($resource);
-            $theme = new \Maki\ThemeManager($this);
-
-            if ( ! isset($info['extension'])) {
-                $this->responseFileNotFound();
-            }
-
-            if ($info['extension'] == 'css') {
-                if ($info['filename'] == 'bootstrap') {
-                    $body = $theme->getBootstrap();
-                } else {
-                    try {
-                        $body = $theme->getStylesheet($info['filename']);
-                    } catch (\InvalidArgumentException $e) {
-                        $this->responseFileNotFound($e->getMessage());
-                    }
-                }
-
-                $this->response($body, 'text/css');
-            }
-
-            if ($info['extension'] == 'js') {
-                switch ($info['filename']) {
-                    case 'jquery': $body = $theme->getJQuery(); break;
-                    case 'prism': $body = $theme->getPrism(); break;
-                }
-
-                $this->response($body, 'application/javascript');
-            }
+            (new ThemeManager($this))->serveResource($_GET['resource']);
         }
     }
 
-    public function loadConfigFile()
-    {
-        if (is_file($this['docroot'].'maki-config.json')) {
-            $config = file_get_contents($this['docroot'].'maki-config.json');
-            return json_decode($config, true);
-        }
-
-        return array();
-    }
-
-    public function response($body, $type = 'text/html', $code = 200)
+    public function response($body = '', $type = 'text/html', $code = 200)
     {
         switch ($code) {
             case 200: header('HTTP/1.1 200 OK'); break;
+            case 400: header('HTTP/1.1 400 Bad Request'); break;
             case 404: header('HTTP/1.1 404 Not Found'); break;
         }
 
@@ -224,6 +344,10 @@ class Maki extends \Pimple
         return $this->page->getUrl();
     }
 
+    /**
+     * Return url.
+     * @return string
+     */
     public function getUrl()
     {
         $url = '';
@@ -263,7 +387,7 @@ class Maki extends \Pimple
     {
         $exts = $this['docs.extensions'];        
         $path = $this['docs.path'].rtrim($directory, '/').'/';
-        $indexName = $this['docs.index_name'];
+        $indexName = $this['docs.index_filename'];
 
         foreach ($this['docs.extensions'] as $ext) {
             if (is_file($path.$indexName.'.'.$ext)) {
@@ -271,14 +395,14 @@ class Maki extends \Pimple
             }
         }
 
-        return $this['docs.index_name'].'.'.key($exts);
+        return $this['docs.index_filename'].'.'.key($exts);
     }
 
     public function findSidebarFile($directory)
     {   
         $exts = $this['docs.extensions'];
         $path = $this['docroot'].$this['docs.path'].($directory == '' ? '' : rtrim($directory, '/').'/');
-        $sidebarName = $this['docs.sidebar_name'];
+        $sidebarName = $this['docs.navigation_filename'];
         
         foreach ($exts as $ext => $null) {
             if (is_file($path.$sidebarName.'.'.$ext)) {
@@ -286,7 +410,7 @@ class Maki extends \Pimple
             }
         }
         
-        return $this['docs.sidebar_name'].'.'.key($exts);
+        return $this['docs.navigation_filename'].'.'.key($exts);
     }
 
     public function createFileInstance($file)
@@ -316,13 +440,9 @@ class Maki extends \Pimple
     # Redirect Trailing Slashes...
     RewriteRule ^(.*)/$ /$1 [L,R=301]
 
-    # Do not allow displaying markdown files directly
-    RewriteCond %{REQUEST_FILENAME} \.('.implode('|', array_keys($this['docs.extensions'])).')$
-    RewriteRule ^ index.php [L]
-
     # Handle Front Controller...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_FILENAME} !-f
+    # RewriteCond %{REQUEST_FILENAME} !-d
+    # RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>');
 
@@ -348,7 +468,9 @@ class Maki extends \Pimple
         $editable = $this['editable'];
         $viewable = $this['viewable'];
         $editButton = ( ! $editable and $viewable) ? 'view source' : 'edit';
-        $activeCss = $theme->getActiveStylesheetName();
+        $activeStylesheet = $theme->getActiveStylesheet();
+        $stylesheet = $theme->getStylesheetPath($activeStylesheet);
+        $mainTitle = $this['main_title'];
 
         ?>
 <!DOCTYPE html>
@@ -357,79 +479,82 @@ class Maki extends \Pimple
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href='<?php echo $url ?>?resource=bootstrap.css' rel='stylesheet'>
-        <link href='<?php echo $theme->getStylesheetLink() ?>' rel='stylesheet'>      
-        <script src='<?php echo $url ?>?resource=jquery.js'></script>
-        <script src='<?php echo $url ?>?resource=prism.js'></script>
+        <link href='<?php echo $url.'?resource='.$stylesheet ?>' rel='stylesheet'>
+        <script src="<?php echo $url ?>?resource=resources/jquery.js"></script>
+        <script src='<?php echo $url ?>?resource=resources/prism.js'></script>
     </head>
     <body>
-        <div class='container page-container'>
-            <div class='themes'>
-                <select>
-                    <?php foreach ($theme->getStylesheets() as $name => $url): ?>
-                        <option value='<?php echo $name ?>' <?php echo $name == $activeCss ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
-                    <?php endforeach ?>
-                </select>
-            </div>
-            
-            <div class='row'>
-                <div class='col-xs-12 col-sm-3 sidebar'>
-                    <div class='sidebar-inner'>
-                        <?php echo $this->sidebar->toHTML() ?>
-                        <?php if ($editable or $viewable): ?>
-                            <div class='page-actions'>
-                                <a href='<?php echo $this->sidebar->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
-                            </div>
-                        <?php endif ?>
+        <div class='container'>
+            <header class="header">
+                <h2><?php echo $mainTitle ?></h2>
+                <?php if ($this['users']): ?>
+                    <div class="user-actions">
+                        hello <a><?php echo $this['user']['username'] ?></a> |
+                        <a href="?logout=1">logout</a>
                     </div>
+                <?php endif ?>
+            </header>
+            <div class='nav'>
+                <div class='nav-inner'>
+                    <?php echo $this->nav->toHTML() ?>
+                    <?php if ($editable or $viewable): ?>
+                        <div class='page-actions'>
+                            <a href='<?php echo $this->nav->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
+                        </div>
+                    <?php endif ?>
                 </div>
-                <div class='col-xs-12 col-sm-9 content'>
-                    <ol class="breadcrumb">
-                        <?php foreach ($this->page->getBreadcrumb() as $link): ?>
-                            <li <?php echo $link['active'] ? 'class="active"' : '' ?>>
-                                <?php if ($link['url']): ?>
-                                    <a href="<?php echo $link['url'] ?>"><?php echo $link['text'] ?></a>
-                                <?php else: ?>
-                                    <?php echo $link['text'] ?>
-                                <?php endif ?>
-                            </li>
-                        <?php endforeach ?>
-                    </ol>
-                    <div class='content-inner'>
-                        <?php if ($this->editing): ?>
-                            <div class='page-actions'>
-                                <a href='<?php echo $this->getPageUrl() ?>' class='btn btn-xs btn-info'>back</a>
-                                <?php if ($editable and $this->page->isNotLocked()): ?>
-                                    <a class='btn btn-xs btn-success save-btn'>save</a>
-                                    <span class='saved-info'>Document saved.</span>
-                                <?php endif ?>
-
-                                <?php if ($this->page->isLocked()): ?>
-                                    <span class='saved-info' style='display: inline-block'>Someone else is editing this document now.</span>
-                                <?php endif ?>
-                            </div>
-                            <textarea id='textarea' class='textarea form-control'><?php echo $this->page->getContent() ?></textarea>
-                        <?php else: ?>
-                            <?php echo $this->page->toHTML() ?>
-
-                            <?php if ($editable or $viewable): ?>
-                                <div class='page-actions clearfix'>
-                                    <?php if ($editable): ?>
-                                        <a href='<?php echo $this->getPageUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
-                                    <?php endif ?>
-                                    <a href='<?php echo $this->getPageUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
-                                </div>
+            </div>
+            <div class='content'>
+                <ol class="breadcrumb">
+                    <?php foreach ($this->page->getBreadcrumb() as $link): ?>
+                        <li <?php echo $link['active'] ? 'class="active"' : '' ?>>
+                            <?php if ($link['url']): ?>
+                                <a href="<?php echo $link['url'] ?>"><?php echo $link['text'] ?></a>
+                            <?php else: ?>
+                                <?php echo $link['text'] ?>
+                            <?php endif ?>
+                        </li>
+                    <?php endforeach ?>
+                </ol>
+                <div class='content-inner'>
+                    <?php if ($this->editing): ?>
+                        <div class='page-actions'>
+                            <a href='<?php echo $this->getPageUrl() ?>' class='btn btn-xs btn-info'>back</a>
+                            <?php if ($editable and $this->page->isNotLocked()): ?>
+                                <a class='btn btn-xs btn-success save-btn'>save</a>
+                                <span class='saved-info'>Document saved.</span>
                             <?php endif ?>
 
+                            <?php if ($this->page->isLocked()): ?>
+                                <span class='saved-info' style='display: inline-block'>Someone else is editing this document now.</span>
+                            <?php endif ?>
+                        </div>
+                        <textarea id='textarea' class='textarea editor-textarea'><?php echo $this->page->getContent() ?></textarea>
+                    <?php else: ?>
+                        <?php echo $this->page->toHTML() ?>
+
+                        <?php if ($editable or $viewable): ?>
+                            <div class='page-actions clearfix'>
+                                <?php if ($editable): ?>
+                                    <a href='<?php echo $this->getPageUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
+                                <?php endif ?>
+                                <a href='<?php echo $this->getPageUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
+                            </div>
                         <?php endif ?>
-                    </div>
+
+                    <?php endif ?>
                 </div>
             </div>
-            <div class='row'>
-                <footer class='col-md-9 col-md-offset-3 footer text-right'>
-                    <p class='copyrights'><a href='http://darkcinnamon.com/maki' target='_blank' class='maki-name'><strong>ma</strong>ki</a> created by <a href='http://darkcinnamon.com/' target='_blank' class='darkcinnamon-name'><strong>dark</strong>cinnamon</a></p>
-                </footer>
-            </div>
+            <footer class='footer text-right'>
+                <div class='themes'>
+                    <select>
+                        <?php foreach ($theme->getStylesheets() as $name => $url): ?>
+                            <option value='<?php echo $name ?>' <?php echo $name == $activeStylesheet ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
+                        <?php endforeach ?>
+                    </select>
+                </div>
+                <p class='copyrights'><a href='http://emve.org/maki' target='_blank' class='maki-name'><strong>ma</strong>ki</a> created by <a href='http://darkcinnamon.com/' target='_blank' class='darkcinnamon-name'>emve</a></p>
+            </footer>
         </div>
         <script>
             
@@ -493,5 +618,86 @@ class Maki extends \Pimple
 </html>
     <?php
 
+    }
+
+    public function getusernamePageView()
+    {
+        ob_start();
+
+        $theme = $this->themeManager;
+        $url = $this->getUrl();
+        $activeStylesheet = $theme->getActiveStylesheet();
+        $stylesheet = $theme->getStylesheetPath($activeStylesheet);
+
+        ?>
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>maki</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link href='<?php echo $url.'?resource='.$stylesheet ?>' rel='stylesheet'>
+        <script src="<?php echo $url ?>?resource=resources/jquery.js"></script>
+    </head>
+    <body class='login-page'>
+        <div>
+            <form>
+                <div class="form-group">
+                    <input type="text" placeholder="Username">
+                </div>
+                <div class="form-group">
+                    <input type="password" placeholder="Password">
+                </div>
+                <div class="form-group checkbox">
+                    <label for="field-remember_me"><input type="checkbox" id="field-remember_me"> Remember me</label>
+                </div>
+                <div class="form-group">
+                    <button type="submit">username</button>
+                </div>
+            </form>
+        </div>
+        <script>
+            $(function() {
+                'use strict';
+
+                var $form = $('form'),
+                    $name = $('input[type=text]'),
+                    $password = $('input[type=password]'),
+                    $remember = $('input[type=checkbox]');
+
+                $form.on('submit', function(e) {
+                    e.preventDefault();
+
+                    $.ajax({
+                        url: '?auth=1',
+                        type: 'post',
+                        data: {
+                            username: $name.val(),
+                            password: $password.val(),
+                            remember: $remember[0].checked ? 1 : 0
+                        },
+                        success: function() {
+                            //window.location.reload();
+                        },
+                        error: function(xhr) {
+                            $form.find('.username-form-error').remove();
+                            $form.append('<p class="username-form-error">'+xhr.responseJSON.error+'</p>');
+                        }
+                    });
+
+                    return false;
+                });
+
+            });
+        </script>
+    </body>
+</html>
+        <?php
+
+        $content = ob_get_contents();
+        ob_end_clean();
+
+        return $content;
     }
 }

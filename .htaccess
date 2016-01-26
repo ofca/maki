@@ -4,14 +4,11 @@
     </IfModule>
 
     RewriteEngine On
-    RewriteBase /repos/maki/
+    RewriteBase /
 
+    # @todo disallow maki.json
     # Redirect Trailing Slashes...
     RewriteRule ^(.*)/$ /$1 [L,R=301]
-
-    # Do not allow displaying markdown files directly
-    RewriteCond %{REQUEST_FILENAME} \.(md)$
-    RewriteRule ^ index.php [L]
 
     # Handle Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d

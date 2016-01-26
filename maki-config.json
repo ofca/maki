@@ -1,7 +1,0 @@
-{
-    "docs.path": "docs/",
-    "theme.css": {
-        "light": "light.css"
-    },
-    "theme.default_css": "default"
-}

@@ -1,0 +1,11 @@
+{
+    "docs.path": "docs",
+    "theme.stylesheets": {
+        "test": "test.css"
+    },
+    "theme.active": "light",
+    "main_title": "maki documentation",
+    "users": [
+        { "username": "ofca", "password": "123456" }
+    ]
+}

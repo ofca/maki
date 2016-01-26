@@ -24,4 +24,5 @@ For example if you place **ma**ki in the `domain.com/sub/directory` your base pa
 }
 ~~~
 
-*[md]: Markdown files
+*[md]: Markdown filess
+

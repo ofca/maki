@@ -9,3 +9,5 @@
 /dist/.htaccess
 /dist/_maki_cache
 /dist/error.log
+/.idea
+/test.css

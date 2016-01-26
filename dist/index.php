@@ -4,7 +4,7 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://emve.org/maki
  *
- * Compiled at: Tuesday 26th of January 2016 08:50:44 PM
+ * Compiled at: Tuesday 26th of January 2016 09:35:22 PM
  * Created by: Tomasz "ofca" Zeludziewicz <ofca@emve.org>
  */
 
@@ -3838,6 +3838,15 @@ namespace Maki {
  * Class Maki
  * @package Maki
  * @todo secure maki.json
+ * @todo add {toc} to markodown
+ * @todo better css for headers
+ * @todo editor look&feel
+ * @todo search
+ * @todo page renaming
+ * @todo who made change on page
+ * @todo expandable sections
+ * @todo if page has "." (dot) in name there occurs error "No input file specified"
+ * @todo "download as file" option for code snippets
  */
 class Maki extends \Pimple
 {
@@ -4912,7 +4921,7 @@ NAV
     padding-left: 40px;
     padding-right: 40px;
     zoom: 1;
-    max-width: 700px;
+    max-width: 800px;
 }
 .content:before,
 .content:after {

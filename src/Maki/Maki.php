@@ -14,6 +14,8 @@ namespace Maki;
  * @todo who made change on page
  * @todo expandable sections
  * @todo if page has "." (dot) in name there occurs error "No input file specified"
+ * @todo "download as file" option for code snippets
+ * @todo nav on mobile
  */
 class Maki extends \Pimple
 {

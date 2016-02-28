@@ -4,7 +4,7 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://emve.org/maki
  *
- * Compiled at: Tuesday 26th of January 2016 09:35:22 PM
+ * Compiled at: Sunday 28th of February 2016 08:43:50 PM
  * Created by: Tomasz "ofca" Zeludziewicz <ofca@emve.org>
  */
 
@@ -3537,6 +3537,11 @@ class Markdown
         return $this;
     }
 
+    public function getFilePath()
+    {
+        return $this->filePath;
+    }
+
     public function getBreadcrumb()
     {
         if ($this->breadcrumb === null) {
@@ -3847,46 +3852,26 @@ namespace Maki {
  * @todo expandable sections
  * @todo if page has "." (dot) in name there occurs error "No input file specified"
  * @todo "download as file" option for code snippets
+ * @todo nav on mobile
  */
 class Maki extends \Pimple
 {
     protected $url;
     protected $editing = false;
     protected $nav;
+
+    /**
+     * @var \Maki\File\Markdown
+     * @todo this should be interface
+     */
     protected $page;
+
     protected $sessionId;
     protected $themeManager;
 
     protected $values = [
         'main_title'    => null
     ];
-
-    public function getResource($path)
-    {
-        $func = 'resource_'.md5($path);
-
-        if (function_exists($func)) {
-            return $func();
-        }
-
-        $realpath = realpath($this['docroot'].$path);
-
-        if ($realpath == false or strpos($realpath, $this['docroot']) !== 0) {
-            return false;
-        }
-
-        $ext = pathinfo($realpath, PATHINFO_EXTENSION);
-
-        if ( ! in_array($ext, ['css', 'js'])) {
-            return false;
-        }
-
-        if (is_file($realpath)) {
-            return file_get_contents($realpath);
-        }
-
-        return false;
-    }
 
     /**
      * Config:
@@ -3955,7 +3940,7 @@ class Maki extends \Pimple
             $this['parser.markdown'] = $this->share(function($c) {
                 $markdown = new Markdown();
                 $markdown->baseUrl = $c['url.base'];
-                
+
                 return $markdown;
             });
         }
@@ -3992,7 +3977,7 @@ class Maki extends \Pimple
 
         // Normalize path
         $this['cache_dir'] = rtrim($this['cache_dir'], '/').'/';
-      
+
         // Create cache dir
         if ( ! is_dir($this->getCacheDirAbsPath())) {
             mkdir($this->getCacheDirAbsPath(), 0700, true);
@@ -4034,117 +4019,48 @@ class Maki extends \Pimple
             $this->page->delete();
             $this->redirect($this->getUrl());
         }
-    }
 
-    /**
-     * Check if user is allowed to see wiki.
-     */
-    protected function checkAuthorization()
-    {
-        // Logout
-        if (isset($_GET['logout'])) {
-            $this->deauthorize();
-            $this->redirect($this->getUrl());
-        }
+        // Simple router
+        if (isset($_GET['action'])) {
+            $action = $_GET['action'];
 
-        // If no users defined wiki is public
-        if (!$this['users']) {
-            return;
-        }
-
-        $users = $this['users'];
-
-        // User authorized
-        if (isset($_SESSION['auth'])) {
-            foreach ($users as $user) {
-                if ($user['username'] == $_SESSION['auth']) {
-                    $this['user'] = $user;
-                    return true;
-                }
+            if (!preg_match('/^[a-z]+$/i', $action)) {
+                $this->responseFileNotFound();
             }
 
-            // If user not found on the list it means he/she was logged
-            // but in the meantime someone modified maki's config file.
-            // We logout this user now.
-            $this->deauthorize();
-        }
+            $action .= 'Action';
 
-        // Authorization request
-        if ($_SERVER['REQUEST_METHOD'] == 'POST' and isset($_GET['auth'])) {
-            $username = isset($_POST['username']) ? $_POST['username'] : '';
-            $pass = isset($_POST['password']) ? $_POST['password'] : '';
-            $remember = isset($_POST['remember']) ? $_POST['remember'] : '0';
-
-            foreach ($users as $user) {
-                if ($user['username'] == $username and $user['password'] == $pass) {
-                    $this->authorize($username, $remember == '1');
-                    $this->response();
-                }
-            }
-
-            $this->response(json_encode([
-                'error' => 'Invalid username or password.'
-            ]), 'application/json', 400);
-        }
-
-        $cookieName = $this['cookie.auth_name'];
-
-        if (isset($_COOKIE[$cookieName])) {
-            $token = $_COOKIE[$cookieName];
-
-            if (strlen($token) == 40 and preg_match('/^[0-9a-z]+$/', $token)) {
-                $path = $this['cache_dir'].'users/'.$token;
-
-                if (is_file($path)) {
-                    $username = file_get_contents($path);
-
-                    foreach ($users as $user) {
-                        if ($user['username'] == $username) {
-                            $this->authorize($username);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Display username form
-        $this->response($this->getusernamePageView());
-    }
-
-    protected function authorize($username, $remember = false)
-    {
-        $_SESSION['auth'] = $username;
-
-        if ($remember) {
-            $token = sha1($username.$this['salt']);
-            setcookie($this['cookie.auth_name'], $token, time() + $this['cookie.auth_expire'], '/');
-
-            $path = $this['cache_dir'].'users/';
-            if (!is_dir($path)) {
-                mkdir($path, 0777, true);
-            }
-
-            file_put_contents($path.$token, $username);
-
-            // Garbage collector
-            foreach (scandir($path) as $fileName) {
-                if ($fileName == '.' or $fileName == '..') {
-                    continue;
-                }
-
-                if (filemtime($path.$fileName) < time() - $this['cookie.auth_expire']) {
-                    @unlink($path.$fileName);
-                }
+            if (method_exists($this, $action)) {
+                $this->$action();
             }
         }
     }
 
-    protected function deauthorize()
+    public function getResource($path)
     {
-        session_destroy();
-        unset($_COOKIE[$this['cookie.auth_name']]);
-        setcookie($this['cookie.auth_name'], null, -1, '/');
+        $func = 'resource_'.md5($path);
+
+        if (function_exists($func)) {
+            return $func();
+        }
+
+        $realpath = realpath($this['docroot'].$path);
+
+        if ($realpath == false or strpos($realpath, $this['docroot']) !== 0) {
+            return false;
+        }
+
+        $ext = pathinfo($realpath, PATHINFO_EXTENSION);
+
+        if ( ! in_array($ext, ['css', 'js'])) {
+            return false;
+        }
+
+        if (is_file($realpath)) {
+            return file_get_contents($realpath);
+        }
+
+        return false;
     }
 
     public function handleResourceRequest()
@@ -4154,7 +4070,7 @@ class Maki extends \Pimple
         }
     }
 
-    public function response($body = '', $type = 'text/html', $code = 200)
+    public function response($body = '', $type = 'text/html', $code = 200, $headers = [])
     {
         switch ($code) {
             case 200: header('HTTP/1.1 200 OK'); break;
@@ -4163,6 +4079,10 @@ class Maki extends \Pimple
         }
 
         header('Content-Type: '.$type);
+
+        foreach ($headers as $header) {
+            header($header);
+        }
 
         echo $body;
 
@@ -4203,7 +4123,7 @@ class Maki extends \Pimple
         $port = $_SERVER['SERVER_PORT'];
         $port = ((!$ssl && $port=='80') || ($ssl && $port=='443')) ? '' : ':'.$port;
         $host = $_SERVER['HTTP_HOST'];
-        
+
         return $protocol.'://'.$host.$port.$this['url.base'];
     }
 
@@ -4231,7 +4151,7 @@ class Maki extends \Pimple
 
     public function findIndexFile($directory)
     {
-        $exts = $this['docs.extensions'];        
+        $exts = $this['docs.extensions'];
         $path = $this['docs.path'].rtrim($directory, '/').'/';
         $indexName = $this['docs.index_filename'];
 
@@ -4245,17 +4165,17 @@ class Maki extends \Pimple
     }
 
     public function findSidebarFile($directory)
-    {   
+    {
         $exts = $this['docs.extensions'];
         $path = $this['docroot'].$this['docs.path'].($directory == '' ? '' : rtrim($directory, '/').'/');
         $sidebarName = $this['docs.navigation_filename'];
-        
+
         foreach ($exts as $ext => $null) {
             if (is_file($path.$sidebarName.'.'.$ext)) {
                 return $sidebarName.'.'.$ext;
             }
         }
-        
+
         return $this['docs.navigation_filename'].'.'.key($exts);
     }
 
@@ -4294,7 +4214,7 @@ class Maki extends \Pimple
 
             $this->redirect($this->getUrl(), false);
         }
-        
+
     }
 
     public function render()
@@ -4328,6 +4248,10 @@ class Maki extends \Pimple
         <link href='<?php echo $url.'?resource='.$stylesheet ?>' rel='stylesheet'>
         <script src="<?php echo $url ?>?resource=resources/jquery.js"></script>
         <script src='<?php echo $url ?>?resource=resources/prism.js'></script>
+        <script src='<?php echo $url ?>?resource=resources/toc.min.js'></script>
+        <script>
+            var __PAGE_PATH__ = '<?php echo $this->page->getFilePath() ?>';
+        </script>
     </head>
     <body>
         <div class='container'>
@@ -4403,7 +4327,7 @@ class Maki extends \Pimple
             </footer>
         </div>
         <script>
-            
+
         </script>
         <script>
             <?php if ($this->editing and $editable and $this->page->isNotLocked()): ?>
@@ -4448,16 +4372,33 @@ class Maki extends \Pimple
                 }
             });
 
-            $('code').each(function() {
+            var codeActionsTmpl = '' +
+                '<div class="code-actions">' +
+                '   <a href="#download" class="code-action-download">download</a>'
+                '</div>';
+
+            $('.content').find('pre > code').each(function(index) {
+                var $this = $(this);
+
                 if (this.className != '') {
                     this.className = 'language-'+this.className;
                 }
+
+                $(codeActionsTmpl)
+                    .find('.code-action-download')
+                    .attr('href', '?action=downloadCode&index=' + index)
+                    .insertAfter($this.parent());
             });
 
             Prism.highlightAll();
 
             $('.themes > select').on('change', function() {
                 window.location = '<?php $this->getCurrentUrl() ?>?change_css='+this.value;
+            });
+
+            $('.nav-inner [href="/'+__PAGE_PATH__+'"]').closest('li').append('<div id="page-toc"></div>');
+            $('#page-toc').toc({
+                container: '.content-inner'
             });
         </script>
     </body>
@@ -4466,7 +4407,7 @@ class Maki extends \Pimple
 
     }
 
-    public function getusernamePageView()
+    public function getLoginPageView()
     {
         ob_start();
 
@@ -4545,6 +4486,159 @@ class Maki extends \Pimple
         ob_end_clean();
 
         return $content;
+    }
+
+    /**
+     * Check if user is allowed to see wiki.
+     */
+    protected function checkAuthorization()
+    {
+        // Logout
+        if (isset($_GET['logout'])) {
+            $this->deauthorize();
+            $this->redirect($this->getUrl());
+        }
+
+        // If no users defined wiki is public
+        if (!$this['users']) {
+            return;
+        }
+
+        $users = $this['users'];
+
+        // User authorized
+        if (isset($_SESSION['auth'])) {
+            foreach ($users as $user) {
+                if ($user['username'] == $_SESSION['auth']) {
+                    $this['user'] = $user;
+                    return true;
+                }
+            }
+
+            // If user not found on the list it means he/she was logged
+            // but in the meantime someone modified maki's config file.
+            // We logout this user now.
+            $this->deauthorize();
+        }
+
+        // Authorization request
+        if ($_SERVER['REQUEST_METHOD'] == 'POST' and isset($_GET['auth'])) {
+            $username = isset($_POST['username']) ? $_POST['username'] : '';
+            $pass = isset($_POST['password']) ? $_POST['password'] : '';
+            $remember = isset($_POST['remember']) ? $_POST['remember'] : '0';
+
+            foreach ($users as $user) {
+                if ($user['username'] == $username and $user['password'] == $pass) {
+                    $this->authorize($username, $remember == '1');
+                    $this->response();
+                }
+            }
+
+            $this->response(json_encode([
+                'error' => 'Invalid username or password.'
+            ]), 'application/json', 400);
+        }
+
+        $cookieName = $this['cookie.auth_name'];
+
+        if (isset($_COOKIE[$cookieName])) {
+            $token = $_COOKIE[$cookieName];
+
+            if (strlen($token) == 40 and preg_match('/^[0-9a-z]+$/', $token)) {
+                $path = $this['cache_dir'].'users/'.$token;
+
+                if (is_file($path)) {
+                    $username = file_get_contents($path);
+
+                    foreach ($users as $user) {
+                        if ($user['username'] == $username) {
+                            $this->authorize($username);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Display username form
+        $this->response($this->getLoginPageView());
+    }
+
+    protected function authorize($username, $remember = false)
+    {
+        $_SESSION['auth'] = $username;
+
+        if ($remember) {
+            $token = sha1($username.$this['salt']);
+            setcookie($this['cookie.auth_name'], $token, time() + $this['cookie.auth_expire'], '/');
+
+            $path = $this['cache_dir'].'users/';
+            if (!is_dir($path)) {
+                mkdir($path, 0777, true);
+            }
+
+            file_put_contents($path.$token, $username);
+
+            // Garbage collector
+            foreach (scandir($path) as $fileName) {
+                if ($fileName == '.' or $fileName == '..') {
+                    continue;
+                }
+
+                if (filemtime($path.$fileName) < time() - $this['cookie.auth_expire']) {
+                    @unlink($path.$fileName);
+                }
+            }
+        }
+    }
+
+    protected function deauthorize()
+    {
+        session_destroy();
+        unset($_COOKIE[$this['cookie.auth_name']]);
+        setcookie($this['cookie.auth_name'], null, -1, '/');
+    }
+
+    public function downloadCodeAction()
+    {
+        $index = (int) $_GET['index'];
+        $lines = explode("\n", $this->page->getContent());
+        $fileName = pathinfo($this->page->getName(), PATHINFO_FILENAME);
+
+        $counter = 0;
+        $opened = false;
+        $codeType = '';
+        $code = [];
+
+        foreach ($lines as $line) {
+            $spacelessLine = preg_replace('/[\t\s]+/', '', $line);
+
+            if (strpos($spacelessLine, '```') === 0) {
+                if ($opened) {
+                    $opened = false;
+
+                    // This is what we are looking for
+                    if ($index == $counter) {
+                        $this->response(implode("\n", $code), 'application/octet-stream', 200, [
+                            'Content-Type: application/octet-stream',
+                            'Content-Transfer-Encoding: Binary',
+                            'Content-disposition: attachment; filename="'.$fileName.'.'.$codeType.'"'
+                        ]);
+                    }
+
+                    $counter++;
+                } else {
+                    $opened = true;
+                    $code = [];
+                    $codeType = substr($line, 3);
+                    continue;
+                }
+            }
+
+            if ($opened) {
+                $code[] = $line;
+            }
+        }
     }
 }
 
@@ -4744,6 +4838,26 @@ NAV
 
 .nav-inner > h1:first-child {
     margin-bottom: 10px;
+}
+
+#page-toc {
+    background: #e6e6e6;
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding: .5rem 2rem;
+    margin-bottom: 1rem;
+}
+#page-toc a {
+    color: gray;
+}
+#page-toc .toc-active a, #page-toc a:hover {
+    color: #000;
+}
+#page-toc .toc-h2 {
+    padding-left: 10px;
+}
+#page-toc .toc-h3 {
+    padding-left: 20px;
 }
 
 @media (max-width: 480px) {
@@ -5278,6 +5392,23 @@ pre[class*="language-"].line-numbers .line-numbers-rows {
 }
 
 
+    <?php
+    $content = ob_get_contents();
+    ob_end_clean();
+    return $content;
+}
+
+
+function resource_14d2f72548c683c8191c0bcc303e6f6d() {
+    ob_start(); ?>
+    /*!
+ * toc - jQuery Table of Contents Plugin
+ * v0.3.2
+ * http://projects.jga.me/toc/
+ * copyright Greg Allen 2014
+ * MIT License
+ */
+!function(a){a.fn.smoothScroller=function(b){b=a.extend({},a.fn.smoothScroller.defaults,b);var c=a(this);return a(b.scrollEl).animate({scrollTop:c.offset().top-a(b.scrollEl).offset().top-b.offset},b.speed,b.ease,function(){var a=c.attr("id");a.length&&(history.pushState?history.pushState(null,null,"#"+a):document.location.hash=a),c.trigger("smoothScrollerComplete")}),this},a.fn.smoothScroller.defaults={speed:400,ease:"swing",scrollEl:"body,html",offset:0},a("body").on("click","[data-smoothscroller]",function(b){b.preventDefault();var c=a(this).attr("href");0===c.indexOf("#")&&a(c).smoothScroller()})}(jQuery),function(a){var b={};a.fn.toc=function(b){var c,d=this,e=a.extend({},jQuery.fn.toc.defaults,b),f=a(e.container),g=a(e.selectors,f),h=[],i=e.activeClass,j=function(b,c){if(e.smoothScrolling&&"function"==typeof e.smoothScrolling){b.preventDefault();var f=a(b.target).attr("href");e.smoothScrolling(f,e,c)}a("li",d).removeClass(i),a(b.target).parent().addClass(i)},k=function(){c&&clearTimeout(c),c=setTimeout(function(){for(var b,c=a(window).scrollTop(),f=Number.MAX_VALUE,g=0,j=0,k=h.length;k>j;j++){var l=Math.abs(h[j]-c);f>l&&(g=j,f=l)}a("li",d).removeClass(i),b=a("li:eq("+g+")",d).addClass(i),e.onHighlight(b)},50)};return e.highlightOnScroll&&(a(window).bind("scroll",k),k()),this.each(function(){var b=a(this),c=a(e.listType);g.each(function(d,f){var g=a(f);h.push(g.offset().top-e.highlightOffset);var i=e.anchorName(d,f,e.prefix);if(f.id!==i){a("<span/>").attr("id",i).insertBefore(g)}var l=a("<a/>").text(e.headerText(d,f,g)).attr("href","#"+i).bind("click",function(c){a(window).unbind("scroll",k),j(c,function(){a(window).bind("scroll",k)}),b.trigger("selected",a(this).attr("href"))}),m=a("<li/>").addClass(e.itemClass(d,f,g,e.prefix)).append(l);c.append(m)}),b.html(c)})},jQuery.fn.toc.defaults={container:"body",listType:"<ul/>",selectors:"h1,h2,h3",smoothScrolling:function(b,c,d){a(b).smoothScroller({offset:c.scrollToOffset}).on("smoothScrollerComplete",function(){d()})},scrollToOffset:0,prefix:"toc",activeClass:"toc-active",onHighlight:function(){},highlightOnScroll:!0,highlightOffset:100,anchorName:function(c,d,e){if(d.id.length)return d.id;var f=a(d).text().replace(/[^a-z0-9]/gi," ").replace(/\s+/g,"-").toLowerCase();if(b[f]){for(var g=2;b[f+g];)g++;f=f+"-"+g}return b[f]=!0,e+"-"+f},headerText:function(a,b,c){return c.text()},itemClass:function(a,b,c,d){return d+"-"+c[0].tagName.toLowerCase()}}}(jQuery);
     <?php
     $content = ob_get_contents();
     ob_end_clean();

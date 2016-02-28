@@ -540,7 +540,7 @@ class Maki extends \Pimple
                 '   <a href="#download" class="code-action-download">download</a>'
                 '</div>';
 
-            $('.content').find('code').each(function(index) {
+            $('.content').find('pre > code').each(function(index) {
                 var $this = $(this);
 
                 if (this.className != '') {
@@ -776,7 +776,7 @@ class Maki extends \Pimple
         foreach ($lines as $line) {
             $spacelessLine = preg_replace('/[\t\s]+/', '', $line);
 
-            if (strpos($spacelessLine, '~~~') === 0) {
+            if (strpos($spacelessLine, '```') === 0) {
                 if ($opened) {
                     $opened = false;
 

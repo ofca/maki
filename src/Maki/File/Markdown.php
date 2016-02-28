@@ -69,6 +69,11 @@ class Markdown
         return $this;
     }
 
+    public function getFilePath()
+    {
+        return $this->filePath;
+    }
+
     public function getBreadcrumb()
     {
         if ($this->breadcrumb === null) {

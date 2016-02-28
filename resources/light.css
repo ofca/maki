@@ -160,6 +160,26 @@ NAV
     margin-bottom: 10px;
 }
 
+#page-toc {
+    background: #e6e6e6;
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding: .5rem 2rem;
+    margin-bottom: 1rem;
+}
+#page-toc a {
+    color: gray;
+}
+#page-toc .toc-active a, #page-toc a:hover {
+    color: #000;
+}
+#page-toc .toc-h2 {
+    padding-left: 10px;
+}
+#page-toc .toc-h3 {
+    padding-left: 20px;
+}
+
 @media (max-width: 480px) {
     .nav {
         padding: 20px;

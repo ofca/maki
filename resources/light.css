@@ -608,6 +608,7 @@ pre[class*="language-"]:after {
 .token.doctype,
 .token.cdata {
     color: #7D8B99;
+    font-family: "Courier New";
 }
 
 .token.punctuation {

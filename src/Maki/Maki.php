@@ -6,7 +6,6 @@ namespace Maki;
  * Class Maki
  * @package Maki
  * @todo secure maki.json
- * @todo add {toc} to markodown
  * @todo better css for headers
  * @todo editor look&feel
  * @todo search
@@ -16,24 +15,31 @@ namespace Maki;
  * @todo if page has "." (dot) in name there occurs error "No input file specified"
  * @todo "download as file" option for code snippets
  * @todo nav on mobile
+ * @todo make nicer error page for "maki.dev/something.php" url.
  */
 class Maki extends \Pimple
 {
     protected $url;
-    protected $editing = false;
-    protected $nav;
-
-    /**
-     * @var \Maki\File\Markdown
-     * @todo this should be interface
-     */
-    protected $page;
 
     protected $sessionId;
+    /**
+     * @var ThemeManager
+     */
     protected $themeManager;
 
+    /**
+     * Base container values.
+     * @var array
+     */
     protected $values = [
         'main_title'    => null
+    ];
+
+    protected $controllers = [
+        'Maki\Controller\ServeResourceController' => 9999,
+        'Maki\Controller\UserController' => 1000,
+        'Maki\Controller\ThemeManagerController' => 1000,
+        'Maki\Controller\PageController' => 0
     ];
 
     /**
@@ -48,6 +54,7 @@ class Maki extends \Pimple
     {
         session_start();
         $this->sessionId = session_id();
+
         $config = new Collection($config);
 
         // Document root path must be defined
@@ -63,24 +70,7 @@ class Maki extends \Pimple
 
         // Create htaccess as soon as possible (if needed)
         $this->createHtAccess();
-
-        $tm = $this->themeManager = new ThemeManager($this);
-
-        // Set default theme
-        $tm->addStylesheet('light', 'resources/light.css');
-
-        if ($config->has('theme.stylesheets')) {
-            $tm->addStylesheets($config->pull('theme.stylesheets'));
-        }
-
-        // Set active theme
-        if (isset($_COOKIE['theme_css']) and $tm->isStylesheetExist($_COOKIE['theme_css'])) {
-            $tm->setActiveStylesheet($_COOKIE['theme_css']);
-        } else if ($config->has('theme.active')) {
-            $tm->setActiveStylesheet($config->pull('theme.active'));
-        } else {
-            $tm->setActiveStylesheet('light');
-        }
+        $this->initThemeManager($config);
 
         // Documentation files extensions
         $this['docs.extensions'] = $config->pull('docs.extensions') ?: [
@@ -95,8 +85,7 @@ class Maki extends \Pimple
 
         $this->values = array_merge($this->values, $config->toArray());
 
-        // Before do anything serve css/js files
-        $this->handleResourceRequest();
+        $this['user'] = null;
 
         // Define default markdown parser
         if ( ! $this->offsetExists('parser.markdown')) {
@@ -108,12 +97,12 @@ class Maki extends \Pimple
             });
         }
 
-        // Markdown files directory
+        //
         if ( ! $this->offsetExists('docs.path')) {
             $this['docs.path'] = '';
         }
 
-        // Normalize docs.path
+        // Markdown files directory
         $this['docs.path'] = $this['docs.path'] == '' ? '' : rtrim($this['docs.path'], '/').'/';
 
         // Index file in directory
@@ -130,6 +119,7 @@ class Maki extends \Pimple
             $this['editable'] = true;
         }
 
+        // Whats for is "viewable"?
         if ( ! $this->offsetExists('viewable')) {
             $this['viewable'] = true;
         }
@@ -146,57 +136,15 @@ class Maki extends \Pimple
             mkdir($this->getCacheDirAbsPath(), 0700, true);
         }
 
-        $this['user'] = null;
-        $this->checkAuthorization();
+        $this->handleRequest();
+    }
 
-        if (isset($_GET['change_css'])) {
-            // @todo sanitize (check if this stylesheet exist)
-            setcookie('theme_css', $_GET['change_css'], time()+2592000, '/');
-            header('Location: '.$this->getUrl().$this->getCurrentUrl());
-            exit;
-        }
-
-        $url = $this->getCurrentUrl();
-        $info = pathinfo($url);
-        $dirName = isset($info['dirname']) ? $info['dirname'] : '';
-
-        $this->nav = $this->createFileInstance($this->findSidebarFile($dirName));
-
-        // No file specified, so default index is taken
-        if ( ! isset($info['extension'])) {
-            $url .= $this->findIndexFile($url);
-        }
-
-        $this->page = $this->createFileInstance($url);
-
-        if (($this['editable'] or $this['viewable']) and isset($_GET['edit'])) {
-            $this->editing = true;
-        }
-
-        if ($this['editable'] and isset($_GET['save'])) {
-            $this->page->setContent(isset($_POST['content']) ? $_POST['content'] : '')->save();
-            exit('1');
-        }
-
-        if ($this['editable'] and isset($_GET['delete'])) {
-            $this->page->delete();
-            $this->redirect($this->getUrl());
-        }
-
-        // Simple router
-        if (isset($_GET['action'])) {
-            $action = $_GET['action'];
-
-            if (!preg_match('/^[a-z]+$/i', $action)) {
-                $this->responseFileNotFound();
-            }
-
-            $action .= 'Action';
-
-            if (method_exists($this, $action)) {
-                $this->$action();
-            }
-        }
+    /**
+     * @return ThemeManager
+     */
+    public function getThemeManager()
+    {
+        return $this->themeManager;
     }
 
     public function getResource($path)
@@ -224,13 +172,6 @@ class Maki extends \Pimple
         }
 
         return false;
-    }
-
-    public function handleResourceRequest()
-    {
-        if (isset($_GET['resource'])) {
-            (new ThemeManager($this))->serveResource($_GET['resource']);
-        }
     }
 
     public function response($body = '', $type = 'text/html', $code = 200, $headers = [])
@@ -268,26 +209,25 @@ class Maki extends \Pimple
         return $this->url;
     }
 
-    public function getPageUrl()
-    {
-        return $this->page->getUrl();
-    }
-
     /**
      * Return url.
      * @return string
      */
     public function getUrl()
     {
-        $url = '';
+        static $url;
 
-        $ssl = ( ! empty($_SERVER['HTTPS']) and $_SERVER['HTTPS'] == 'on');
-        $protocol = 'http'.($ssl ? 's' : '');
-        $port = $_SERVER['SERVER_PORT'];
-        $port = ((!$ssl && $port=='80') || ($ssl && $port=='443')) ? '' : ':'.$port;
-        $host = $_SERVER['HTTP_HOST'];
+        if (!$url) {
+            $ssl = (!empty($_SERVER['HTTPS']) and $_SERVER['HTTPS'] == 'on');
+            $protocol = 'http' . ($ssl ? 's' : '');
+            $port = $_SERVER['SERVER_PORT'];
+            $port = ((!$ssl && $port == '80') || ($ssl && $port == '443')) ? '' : ':' . $port;
+            $host = $_SERVER['HTTP_HOST'];
 
-        return $protocol.'://'.$host.$port.$this['url.base'];
+            $url = $protocol . '://' . $host . $port . $this['url.base'];
+        }
+
+        return $url;
     }
 
     public function getCacheDirAbsPath()
@@ -312,422 +252,86 @@ class Maki extends \Pimple
         exit(0);
     }
 
-    public function findIndexFile($directory)
+    /**
+     * Return url to specified resource.
+     *
+     *     $app->getResourceUrl('resources/jquery.js');
+     *     // Return "http://domain.com?resource=resources/jquery.js
+     *
+     * @param $resource
+     * @return string
+     */
+    public function getResourceUrl($resource)
     {
-        $exts = $this['docs.extensions'];
-        $path = $this['docs.path'].rtrim($directory, '/').'/';
-        $indexName = $this['docs.index_filename'];
+        return $this->getUrl().'?resource='.$resource;
+    }
 
-        foreach ($this['docs.extensions'] as $ext) {
-            if (is_file($path.$indexName.'.'.$ext)) {
-                return $indexName.'.'.$ext;
+    /**
+     * Render view.
+     *
+     * @param $path Path to view (relative from document root).
+     * @param array $data Data passed to view.
+     * @return string
+     */
+    public function render($path, array $data = [])
+    {
+        $data['app'] = $this;
+        $func = 'view_'.md5($path);
+
+        if (function_exists($func)) {
+            $content = $func($data);
+        } else {
+            extract($data);
+            $path = $this['docroot'] . $path;
+
+            if (!is_file($path)) {
+                throw new \InvalidArgumentException(sprintf('View "%s" does not exists.', $path));
             }
+
+            ob_start();
+            include $path;
+            $content = ob_get_contents();
+            ob_end_clean();
         }
-
-        return $this['docs.index_filename'].'.'.key($exts);
-    }
-
-    public function findSidebarFile($directory)
-    {
-        $exts = $this['docs.extensions'];
-        $path = $this['docroot'].$this['docs.path'].($directory == '' ? '' : rtrim($directory, '/').'/');
-        $sidebarName = $this['docs.navigation_filename'];
-
-        foreach ($exts as $ext => $null) {
-            if (is_file($path.$sidebarName.'.'.$ext)) {
-                return $sidebarName.'.'.$ext;
-            }
-        }
-
-        return $this['docs.navigation_filename'].'.'.key($exts);
-    }
-
-    public function createFileInstance($file)
-    {
-        $ext = pathinfo($file, PATHINFO_EXTENSION);
-
-        if ( ! isset($this['docs.extensions'][$ext])) {
-            throw new \InvalidArgumentException(sprintf('File class for %s not exists.', $file));
-        }
-
-        $class = '\\Maki\\File\\'.ucfirst($this['docs.extensions'][$ext]);
-        return new $class($this, $file);
-    }
-
-    public function createHtAccess()
-    {
-        // Create htaccess if not exists yet
-        if ( ! is_file($this['docroot'].'.htaccess')) {
-            file_put_contents($this['docroot'].'.htaccess', '<IfModule mod_rewrite.c>
-    <IfModule mod_negotiation.c>
-        Options -MultiViews
-    </IfModule>
-
-    RewriteEngine On
-    RewriteBase '.$this['url.base'].'
-
-    # Redirect Trailing Slashes...
-    RewriteRule ^(.*)/$ /$1 [L,R=301]
-
-    # Handle Front Controller...
-    # RewriteCond %{REQUEST_FILENAME} !-d
-    # RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^ index.php [L]
-</IfModule>');
-
-            $this->redirect($this->getUrl(), false);
-        }
-
-    }
-
-    public function render()
-    {
-        ob_start();
-        $this->defaultTheme();
-        $content = ob_get_contents();
-        ob_end_clean();
-
-        return $content;
-    }
-
-    public function defaultTheme()
-    {
-        $theme = $this->themeManager;
-        $url = $this->getUrl();
-        $editable = $this['editable'];
-        $viewable = $this['viewable'];
-        $editButton = ( ! $editable and $viewable) ? 'view source' : 'edit';
-        $activeStylesheet = $theme->getActiveStylesheet();
-        $stylesheet = $theme->getStylesheetPath($activeStylesheet);
-        $mainTitle = $this['main_title'];
-
-        ?>
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href='<?php echo $url.'?resource='.$stylesheet ?>' rel='stylesheet'>
-        <script src="<?php echo $url ?>?resource=resources/jquery.js"></script>
-        <script src='<?php echo $url ?>?resource=resources/prism.js'></script>
-        <script src='<?php echo $url ?>?resource=resources/toc.min.js'></script>
-        <script>
-            var __PAGE_PATH__ = '<?php echo $this->page->getFilePath() ?>';
-        </script>
-    </head>
-    <body>
-        <div class='container'>
-            <header class="header">
-                <h2><?php echo $mainTitle ?></h2>
-                <?php if ($this['users']): ?>
-                    <div class="user-actions">
-                        hello <a><?php echo $this['user']['username'] ?></a> |
-                        <a href="?logout=1">logout</a>
-                    </div>
-                <?php endif ?>
-            </header>
-            <div class='nav'>
-                <div class='nav-inner'>
-                    <?php echo $this->nav->toHTML() ?>
-                    <?php if ($editable or $viewable): ?>
-                        <div class='page-actions'>
-                            <a href='<?php echo $this->nav->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
-                        </div>
-                    <?php endif ?>
-                </div>
-            </div>
-            <div class='content'>
-                <ol class="breadcrumb">
-                    <?php foreach ($this->page->getBreadcrumb() as $link): ?>
-                        <li <?php echo $link['active'] ? 'class="active"' : '' ?>>
-                            <?php if ($link['url']): ?>
-                                <a href="<?php echo $link['url'] ?>"><?php echo $link['text'] ?></a>
-                            <?php else: ?>
-                                <?php echo $link['text'] ?>
-                            <?php endif ?>
-                        </li>
-                    <?php endforeach ?>
-                </ol>
-                <div class='content-inner'>
-                    <?php if ($this->editing): ?>
-                        <div class='page-actions'>
-                            <a href='<?php echo $this->getPageUrl() ?>' class='btn btn-xs btn-info'>back</a>
-                            <?php if ($editable and $this->page->isNotLocked()): ?>
-                                <a class='btn btn-xs btn-success save-btn'>save</a>
-                                <span class='saved-info'>Document saved.</span>
-                            <?php endif ?>
-
-                            <?php if ($this->page->isLocked()): ?>
-                                <span class='saved-info' style='display: inline-block'>Someone else is editing this document now.</span>
-                            <?php endif ?>
-                        </div>
-                        <textarea id='textarea' class='textarea editor-textarea'><?php echo $this->page->getContent() ?></textarea>
-                    <?php else: ?>
-                        <?php echo $this->page->toHTML() ?>
-
-                        <?php if ($editable or $viewable): ?>
-                            <div class='page-actions clearfix'>
-                                <?php if ($editable): ?>
-                                    <a href='<?php echo $this->getPageUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
-                                <?php endif ?>
-                                <a href='<?php echo $this->getPageUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
-                            </div>
-                        <?php endif ?>
-
-                    <?php endif ?>
-                </div>
-            </div>
-            <footer class='footer text-right'>
-                <div class='themes'>
-                    <select>
-                        <?php foreach ($theme->getStylesheets() as $name => $url): ?>
-                            <option value='<?php echo $name ?>' <?php echo $name == $activeStylesheet ? 'selected="selected"' : '' ?>><?php echo $name ?></option>
-                        <?php endforeach ?>
-                    </select>
-                </div>
-                <p class='copyrights'><a href='http://emve.org/maki' target='_blank' class='maki-name'><strong>ma</strong>ki</a> created by <a href='http://darkcinnamon.com/' target='_blank' class='darkcinnamon-name'>emve</a></p>
-            </footer>
-        </div>
-        <script>
-
-        </script>
-        <script>
-            <?php if ($this->editing and $editable and $this->page->isNotLocked()): ?>
-                var $saveBtns = $('.save-btn'),
-                    $saved = $('.saved-info');
-
-                function save() {
-                    $.ajax({
-                        url: '<?php $this->getPageUrl() ?>?save=1',
-                        method: 'post',
-                        data: {
-                            content: $('#textarea').val()
-                        },
-                        success: function() {
-                            $saveBtns.attr('disabled', 'disabled');
-                            $saved.show();
-                            setTimeout(function() { save(); }, 5000);
-                        }
-                    });
-                };
-
-                var editing = <?php echo var_export($this->editing, true) ?>;
-
-                if (editing) {
-                    $('#textarea').on('keyup', function() {
-                        $saved.hide();
-                        $saveBtns.removeAttr('disabled');
-                    });
-
-                    $(document).on('click', '.save-btn', save);
-
-                    save();
-                }
-            <?php endif ?>
-
-            $(document).on('click', '[data-confirm]', function(e) {
-                if (confirm($(this).attr('data-confirm'))) {
-                    return true;
-                } else {
-                    e.preventDefault();
-                    return false;
-                }
-            });
-
-            var codeActionsTmpl = '' +
-                '<div class="code-actions">' +
-                '   <a href="#download" class="code-action-download">download</a>'
-                '</div>';
-
-            $('.content').find('pre > code').each(function(index) {
-                var $this = $(this);
-
-                if (this.className != '') {
-                    this.className = 'language-'+this.className;
-                }
-
-                $(codeActionsTmpl)
-                    .find('.code-action-download')
-                    .attr('href', '?action=downloadCode&index=' + index)
-                    .insertAfter($this.parent());
-            });
-
-            Prism.highlightAll();
-
-            $('.themes > select').on('change', function() {
-                window.location = '<?php $this->getCurrentUrl() ?>?change_css='+this.value;
-            });
-
-            $('.nav-inner [href="/'+__PAGE_PATH__+'"]').closest('li').append('<div id="page-toc"></div>');
-            $('#page-toc').toc({
-                container: '.content-inner'
-            });
-        </script>
-    </body>
-</html>
-    <?php
-
-    }
-
-    public function getLoginPageView()
-    {
-        ob_start();
-
-        $theme = $this->themeManager;
-        $url = $this->getUrl();
-        $activeStylesheet = $theme->getActiveStylesheet();
-        $stylesheet = $theme->getStylesheetPath($activeStylesheet);
-
-        ?>
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>maki</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href='<?php echo $url.'?resource='.$stylesheet ?>' rel='stylesheet'>
-        <script src="<?php echo $url ?>?resource=resources/jquery.js"></script>
-    </head>
-    <body class='login-page'>
-        <div>
-            <form>
-                <div class="form-group">
-                    <input type="text" placeholder="Username">
-                </div>
-                <div class="form-group">
-                    <input type="password" placeholder="Password">
-                </div>
-                <div class="form-group checkbox">
-                    <label for="field-remember_me"><input type="checkbox" id="field-remember_me"> Remember me</label>
-                </div>
-                <div class="form-group">
-                    <button type="submit">username</button>
-                </div>
-            </form>
-        </div>
-        <script>
-            $(function() {
-                'use strict';
-
-                var $form = $('form'),
-                    $name = $('input[type=text]'),
-                    $password = $('input[type=password]'),
-                    $remember = $('input[type=checkbox]');
-
-                $form.on('submit', function(e) {
-                    e.preventDefault();
-
-                    $.ajax({
-                        url: '?auth=1',
-                        type: 'post',
-                        data: {
-                            username: $name.val(),
-                            password: $password.val(),
-                            remember: $remember[0].checked ? 1 : 0
-                        },
-                        success: function() {
-                            window.location.reload();
-                        },
-                        error: function(xhr) {
-                            $form.find('.username-form-error').remove();
-                            $form.append('<p class="username-form-error">'+xhr.responseJSON.error+'</p>');
-                        }
-                    });
-
-                    return false;
-                });
-
-            });
-        </script>
-    </body>
-</html>
-        <?php
-
-        $content = ob_get_contents();
-        ob_end_clean();
 
         return $content;
     }
 
     /**
-     * Check if user is allowed to see wiki.
+     * Checks if user is authenticated.
+     *
+     * @return bool
      */
-    protected function checkAuthorization()
+    public function isUserAuthenticated()
     {
-        // Logout
-        if (isset($_GET['logout'])) {
-            $this->deauthorize();
-            $this->redirect($this->getUrl());
-        }
-
-        // If no users defined wiki is public
-        if (!$this['users']) {
-            return;
-        }
-
-        $users = $this['users'];
-
-        // User authorized
-        if (isset($_SESSION['auth'])) {
-            foreach ($users as $user) {
-                if ($user['username'] == $_SESSION['auth']) {
-                    $this['user'] = $user;
-                    return true;
-                }
-            }
-
-            // If user not found on the list it means he/she was logged
-            // but in the meantime someone modified maki's config file.
-            // We logout this user now.
-            $this->deauthorize();
-        }
-
-        // Authorization request
-        if ($_SERVER['REQUEST_METHOD'] == 'POST' and isset($_GET['auth'])) {
-            $username = isset($_POST['username']) ? $_POST['username'] : '';
-            $pass = isset($_POST['password']) ? $_POST['password'] : '';
-            $remember = isset($_POST['remember']) ? $_POST['remember'] : '0';
-
-            foreach ($users as $user) {
-                if ($user['username'] == $username and $user['password'] == $pass) {
-                    $this->authorize($username, $remember == '1');
-                    $this->response();
-                }
-            }
-
-            $this->response(json_encode([
-                'error' => 'Invalid username or password.'
-            ]), 'application/json', 400);
-        }
-
-        $cookieName = $this['cookie.auth_name'];
-
-        if (isset($_COOKIE[$cookieName])) {
-            $token = $_COOKIE[$cookieName];
-
-            if (strlen($token) == 40 and preg_match('/^[0-9a-z]+$/', $token)) {
-                $path = $this['cache_dir'].'users/'.$token;
-
-                if (is_file($path)) {
-                    $username = file_get_contents($path);
-
-                    foreach ($users as $user) {
-                        if ($user['username'] == $username) {
-                            $this->authorize($username);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Display username form
-        $this->response($this->getLoginPageView());
+        return isset($_SESSION['auth']);
     }
 
-    protected function authorize($username, $remember = false)
+    /**
+     * Return user data for specified username.
+     *
+     * @param $username User name.
+     * @return array User data.
+     * @return \InvalidArgumentException If user with specified username does not exists.
+     */
+    public function getUser($username)
+    {
+        foreach ($this['users'] as $user) {
+            if ($user['username'] === $username) {
+                return $user;
+            }
+        }
+
+        return new \InvalidArgumentException(sprintf('User "%s" does not exists.', $username));
+    }
+
+    /**
+     * Authenticate user.
+     *
+     * @param $username User name.
+     * @param bool|false $remember Remember user.
+     */
+    public function authenticate($username, $remember = false)
     {
         $_SESSION['auth'] = $username;
 
@@ -755,52 +359,153 @@ class Maki extends \Pimple
         }
     }
 
-    protected function deauthorize()
+    /**
+     * Deauthenticate user, destroys session, removes "remember me" cookies.
+     */
+    public function deauthenticate()
     {
         session_destroy();
         unset($_COOKIE[$this['cookie.auth_name']]);
         setcookie($this['cookie.auth_name'], null, -1, '/');
     }
 
-    public function downloadCodeAction()
+    protected function handleRequest()
     {
-        $index = (int) $_GET['index'];
-        $lines = explode("\n", $this->page->getContent());
-        $fileName = pathinfo($this->page->getName(), PATHINFO_FILENAME);
-
-        $counter = 0;
-        $opened = false;
-        $codeType = '';
-        $code = [];
-
-        foreach ($lines as $line) {
-            $spacelessLine = preg_replace('/[\t\s]+/', '', $line);
-
-            if (strpos($spacelessLine, '```') === 0) {
-                if ($opened) {
-                    $opened = false;
-
-                    // This is what we are looking for
-                    if ($index == $counter) {
-                        $this->response(implode("\n", $code), 'application/octet-stream', 200, [
-                            'Content-Type: application/octet-stream',
-                            'Content-Transfer-Encoding: Binary',
-                            'Content-disposition: attachment; filename="'.$fileName.'.'.$codeType.'"'
-                        ]);
-                    }
-
-                    $counter++;
-                } else {
-                    $opened = true;
-                    $code = [];
-                    $codeType = substr($line, 3);
-                    continue;
-                }
-            }
-
-            if ($opened) {
-                $code[] = $line;
+        foreach ($this->controllers as $class => $priority) {
+            $action = forward_static_call([$class, 'match'], $this);
+            if (is_string($action)) {
+                $this->dispatchController($class, $action);
             }
         }
     }
+
+    protected function dispatchController($class, $action)
+    {
+        $controller = new $class($this);
+
+        if ($controller->isSecured($action)) {
+            $this->checkAuthentication();
+        }
+
+        if (!method_exists($controller, $action)) {
+            throw new \InvalidArgumentException(sprintf('Method "%s" does not exists in "%s" controller.', $action, $class));
+        }
+
+        call_user_func([$controller, $action]);
+    }
+
+    /**
+     * Creates and inits theme manager.
+     *
+     * - defines default theme
+     * - adds themes specified in config
+     * - resolve active theme
+     *
+     * @param Collection $config
+     */
+    protected function initThemeManager(Collection $config)
+    {
+        $tm = new ThemeManager($this);
+
+        // Set default theme
+        $tm->addStylesheet('light', 'resources/light.css');
+
+        // Add styles defined in config
+        if ($config->has('theme.stylesheets')) {
+            $tm->addStylesheets($config->pull('theme.stylesheets'));
+        }
+
+        // Set active theme
+        if (isset($_COOKIE['theme_css']) and $tm->isStylesheetExist($_COOKIE['theme_css'])) {
+            $tm->setActiveStylesheet($_COOKIE['theme_css']);
+        } else if ($config->has('theme.active')) {
+            $tm->setActiveStylesheet($config->pull('theme.active'));
+        } else {
+            $tm->setActiveStylesheet('light');
+        }
+
+        $this->themeManager = $tm;
+    }
+
+    /**
+     * Creates .htaccess file inside root directory.
+     */
+    protected function createHtAccess()
+    {
+        // Create htaccess if not exists yet
+        if ( ! is_file($this['docroot'].'.htaccess')) {
+            file_put_contents($this['docroot'].'.htaccess', '<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews
+    </IfModule>
+
+    RewriteEngine On
+    RewriteBase '.$this['url.base'].'
+
+    # Redirect Trailing Slashes...
+    RewriteRule ^(.*)/$ /$1 [L,R=301]
+
+    # Handle Front Controller...
+    # RewriteCond %{REQUEST_FILENAME} !-d
+    # RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>');
+
+            $this->redirect($this->getUrl(), false);
+        }
+
+    }
+
+    /**
+     * Check if user is authenticated
+     */
+    protected function checkAuthentication()
+    {
+        // If no users defined wiki is public
+        if (!$this['users']) {
+            return;
+        }
+
+        // User authorized
+        if ($this->isUserAuthenticated()) {
+            try {
+                $this['user'] = $this->getUser($_SESSION['auth']);
+                return;
+            } catch (\InvalidArgumentException $e) {
+                // If user not found on the list it means he/she was logged
+                // but in the meantime someone modified maki's config file.
+                // We logout this user now.
+                $this->deauthenticate();
+            }
+        }
+
+        $cookieName = $this['cookie.auth_name'];
+
+        // Check if user was remembered
+        if (isset($_COOKIE[$cookieName])) {
+            $token = $_COOKIE[$cookieName];
+
+            if (strlen($token) == 40 and preg_match('/^[0-9a-z]+$/', $token)) {
+                $path = $this['cache_dir'].'users/'.$token;
+
+                if (is_file($path)) {
+                    $username = file_get_contents($path);
+
+                    try {
+                        // We call this method only to make sure
+                        // username from cookie exists in our database.
+                        $this->getUser($username);
+                        $this->authenticate($username, true);
+                        return;
+                    } catch (\InvalidArgumentException $e) {
+                        // If getUser throw exception login view will be displayed
+                    }
+                }
+            }
+        }
+
+        // Display username form
+        $this->dispatchController('Maki\Controller\UserController', 'loginPageAction');
+    }
+
 }

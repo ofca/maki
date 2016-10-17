@@ -1,7 +1,7 @@
 {
-    "docs.path": "docs",
+    "docs.path": "our-docs",
     "theme.stylesheets": {
-        "test": "test.css"
+        "redy": "resources/redy.css"
     },
     "theme.active": "light",
     "main_title": "maki documentation",

@@ -14,6 +14,11 @@ $files = array(
     'src/Maki/File/Markdown.php',
     'src/Maki/ThemeManager.php',
     'src/Maki/Collection.php',
+    'src/Maki/Controller.php',
+    'src/Maki/Controller/PageController.php',
+    'src/Maki/Controller/ServeResourceController.php',
+    'src/Maki/Controller/ThemeManagerController.php',
+    'src/Maki/Controller/UserController.php',
     'src/Maki/Maki.php',
     'index.php'
 );
@@ -43,7 +48,29 @@ function resource_%s() {
 $code = '';
 
 foreach (new \DirectoryIterator('resources') as $file) {
-    if (in_array($file->getFilename(), ['.', '..'])) continue;
+    if (in_array($file->getFilename(), ['.', '..']) or $file->isDir()) continue;
+
+    $code .= sprintf(
+        $stub,
+        md5($file->getPathname()),
+        file_get_contents(__DIR__.DIRECTORY_SEPARATOR.$file->getPathname())
+    );
+}
+
+// Add views
+$stub = "
+function view_%s(array \$data = []) {
+    extract(\$data);
+    ob_start(); ?>
+    %s
+    <?php
+    \$content = ob_get_contents();
+    ob_end_clean();
+    return \$content;
+}\n\n";
+
+foreach (new \DirectoryIterator('resources/views') as $file) {
+    if (in_array($file->getFilename(), ['.', '..']) or $file->isDir()) continue;
 
     $code .= sprintf(
         $stub,

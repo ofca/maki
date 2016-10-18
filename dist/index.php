@@ -4,7 +4,7 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://emve.org/maki
  *
- * Compiled at: Monday 17th of October 2016 11:29:20 PM
+ * Compiled at: Tuesday 18th of October 2016 12:37:29 PM
  * Created by: Tomasz "ofca" Zeludziewicz <ofca@emve.org>
  */
 
@@ -15140,11 +15140,13 @@ pre.CodeMirror-line {
 
 .content h2 {
     font-size: 2rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 .content h3 {
     font-size: 1.5rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 
 .content h4 {
@@ -15916,11 +15918,13 @@ pre.CodeMirror-line {
 
 .content h2 {
     font-size: 2rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 .content h3 {
     font-size: 1.5rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 
 .content h4 {

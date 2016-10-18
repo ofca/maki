@@ -384,11 +384,13 @@ pre.CodeMirror-line {
 
 .content h2 {
     font-size: 2rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 .content h3 {
     font-size: 1.5rem;
-    font-weight: 400;
+    font-weight: 300;
+    color: #e8e8e8;
 }
 
 .content h4 {

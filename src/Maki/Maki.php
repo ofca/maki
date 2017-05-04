@@ -5,17 +5,15 @@ namespace Maki;
 /**
  * Class Maki
  * @package Maki
- * @todo secure maki.json
- * @todo better css for headers
- * @todo editor look&feel
+ * @todo add "copy" for code snippets
  * @todo search
  * @todo page renaming
  * @todo who made change on page
  * @todo expandable sections
  * @todo if page has "." (dot) in name there occurs error "No input file specified"
- * @todo "download as file" option for code snippets
  * @todo nav on mobile
  * @todo make nicer error page for "maki.dev/something.php" url.
+ * @todo files in zip archive should not be in full path (/var/www/bla/bla).
  */
 class Maki extends \Pimple
 {
@@ -136,7 +134,80 @@ class Maki extends \Pimple
             mkdir($this->getCacheDirAbsPath(), 0700, true);
         }
 
+        $this->handleBackup();
         $this->handleRequest();
+    }
+
+    public function handleBackup()
+    {
+        if (!isset($this->values['backup'])) {
+            return;
+        }
+
+        $path = $this['cache_dir'].'last_backup';
+        // Make backup if in 24 hours it was not maded.
+        if (!is_file($path) or filemtime($path) > 86400) { // 24 hours
+            $this->makeBackup();
+        }
+    }
+
+    public function makeBackup()
+    {
+        //$this->createArchiveFile();
+    }
+
+    public function createArchiveFile()
+    {
+        $files = $this->getFilesList();
+
+        if ($files) {
+            // Create the archive.
+            $zip = new \ZipArchive();
+            $path = __DIR__.'/'.$this['cache_dir'].'archive.zip';
+            if (($error = $zip->open($path, \ZIPARCHIVE::CREATE | \ZIPARCHIVE::OVERWRITE)) !== true) {
+                return false;
+            }
+
+            // Add the files.
+            foreach ($files as $key => $file) {
+                $zip->addFile($file);
+            }
+
+            // Close the zip -- done!
+            $zip->close();
+
+            if (is_file($this['cache_dir'].'archive.zip')) {
+                return $this['cache_dir'].'archive.zip';
+            }
+        }
+
+        return false;
+    }
+
+    public function getFilesList($directory = null)
+    {
+        if ($directory === null) {
+            $directory = __DIR__.'/'.$this['docs.path'];
+        }
+
+        $files = [];
+        foreach (scandir($directory) as $file) {
+            if ($file == '.' or $file == '..' or $file == '_maki_cache') {
+                continue;
+            }
+
+            if (is_file($directory.$file)) {
+                $ext = pathinfo($file, PATHINFO_EXTENSION);
+                if ($ext != 'md') {
+                    continue;
+                }
+                $files[] = $directory . $file;
+            } else if (is_dir($directory.$file)) {
+                $files = array_merge($files, $this->getFilesList($directory.$file.'/'));
+            }
+        }
+
+        return $files;
     }
 
     /**

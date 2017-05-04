@@ -25,8 +25,40 @@ class PageController extends Controller
             return 'downloadCodeAction';
         }
 
+        if (isset($_GET['ctrl']) and $_GET['ctrl'] == 'page' and isset($_GET['action'])) {
+            switch ($_GET['action']) {
+                case 'get':
+                    return 'getAction';
+                case 'archive':
+                    return 'archiveAction';
+            }
+        }
+
         // Default action.
         return 'pageAction';
+    }
+
+    public function archiveAction()
+    {
+        $path = $this->app->createArchiveFile();
+        $name = $_SERVER['HTTP_HOST'].'-'.date('Y-m-d');
+        if (is_string($path)) {
+            header('Content-Type: application/octet-stream');
+            header("Content-Transfer-Encoding: Binary");
+            header("Content-disposition: attachment; filename=\"{$name}.zip\"");
+            readfile($path);
+            exit;
+        }
+    }
+
+    public function getAction()
+    {
+        if (!isset($_GET['page'])) {
+            $this->app->responseFileNotFound();
+        }
+
+        $page = $this->createFileInstance($_GET['page']);
+        return $this->jsonResponse(['content' => $page->toHTML()]);
     }
 
     /**

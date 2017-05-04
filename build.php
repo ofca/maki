@@ -44,7 +44,10 @@ function resource_%s() {
     ob_end_clean();
     return \$content;
 }\n\n";
-
+$stub = "
+function resource_%s() {
+    return base64_decode('%s');
+}\n\n";
 $code = '';
 
 foreach (new \DirectoryIterator('resources') as $file) {
@@ -53,7 +56,7 @@ foreach (new \DirectoryIterator('resources') as $file) {
     $code .= sprintf(
         $stub,
         md5($file->getPathname()),
-        file_get_contents(__DIR__.DIRECTORY_SEPARATOR.$file->getPathname())
+        base64_encode(file_get_contents(__DIR__.DIRECTORY_SEPARATOR.$file->getPathname()))
     );
 }
 

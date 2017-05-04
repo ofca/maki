@@ -19,12 +19,14 @@
             var __PAGE_PATH__ = '<?php echo $page->getFilePath() ?>';
         </script>
         <?php if ($editing): ?>
-            <link href="<?php echo $app->getResourceUrl('resources/codemirror.css') ?>" rel='stylesheet'>
-            <script src="<?php echo $app->getResourceUrl('resources/codemirror.js') ?>"></script>
-            <script src="<?php echo $app->getResourceUrl('resources/codemirror-continuelist.js') ?>"></script>
-            <script src="<?php echo $app->getResourceUrl('resources/codemirror-xml.js') ?>"></script>
-            <script src="<?php echo $app->getResourceUrl('resources/codemirror-markdown.js') ?>"></script>
-            <script src="<?php echo $app->getResourceUrl('resources/codemirror-rules.js') ?>"></script>
+            <link href="<?php echo $app->getResourceUrl('resources/simplemde.min.css') ?>" rel="stylesheet">
+            <script src="<?php echo $app->getResourceUrl('resources/simplemde.min.js') ?>"></script>
+<!--            <link href="--><?php //echo $app->getResourceUrl('resources/codemirror.css') ?><!--" rel='stylesheet'>-->
+<!--            <script src="--><?php //echo $app->getResourceUrl('resources/codemirror.js') ?><!--"></script>-->
+<!--            <script src="--><?php //echo $app->getResourceUrl('resources/codemirror-continuelist.js') ?><!--"></script>-->
+<!--            <script src="--><?php //echo $app->getResourceUrl('resources/codemirror-xml.js') ?><!--"></script>-->
+<!--            <script src="--><?php //echo $app->getResourceUrl('resources/codemirror-markdown.js') ?><!--"></script>-->
+<!--            <script src="--><?php //echo $app->getResourceUrl('resources/codemirror-rules.js') ?><!--"></script>-->
         <?php endif ?>
     </head>
     <body class="<?php echo $editing ? 'edit-mode' : '' ?>">
@@ -82,10 +84,10 @@
 
                         <?php if ($editable or $viewable): ?>
                             <div class='page-actions clearfix'>
+                                <a href='<?php echo $page->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
                                 <?php if ($editable): ?>
                                     <a href='<?php echo $page->getUrl() ?>?delete=1' data-confirm='Are you sure you want delete this page?' class='btn btn-xs btn-danger pull-right'>delete</a>
                                 <?php endif ?>
-                                <a href='<?php echo $page->getUrl() ?>?edit=1' class='btn btn-xs btn-info pull-right'><?php echo $editButton ?></a>
                             </div>
                         <?php endif ?>
 
@@ -93,6 +95,7 @@
                 </div>
             </div>
             <footer class='footer text-right'>
+                <a class="btn btn-info" href="?ctrl=page&action=archive">download archive</a>
                 <div class='themes'>
                     <select>
                         <?php foreach ($app->getThemeManager()->getStylesheets() as $name => $url): ?>
@@ -116,7 +119,7 @@
                     url: '<?php $page->getUrl() ?>?save=1',
                     method: 'post',
                     data: {
-                        content:  editor.getValue()//$('#textarea').val()
+                        content:  editor.value()//$('#textarea').val()
                     },
                     success: function() {
                         $saveBtns.attr('disabled', 'disabled');
@@ -130,20 +133,28 @@
 
             if (editing) {
 
-                editor = CodeMirror.fromTextArea(document.getElementById("textarea"), {
-                    mode: 'markdown',
-                    tabSize: 4,
-                    lineNumbers: false,
-                    theme: "default",
-                    extraKeys: {"Enter": "newlineAndIndentContinueMarkdownList"},
-                    rulers: [{ color: '#ccc', column: 80, lineStyle: 'dashed' }]
+                editor = new SimpleMDE({
+                    element: document.getElementById('textarea'),
+                    spellChecker: false,
+                    toolbar: false
+                });
+                editor.codemirror.on('change', function() {
+                    $saveBtns.removeAttr('disabled');
                 });
 
-
-//                $('#textarea').on('keyup', function() {
-//                    $saved.hide();
-//                    $saveBtns.removeAttr('disabled');
+//                editor = CodeMirror.fromTextArea(document.getElementById("textarea"), {
+//                    mode: 'markdown',
+//                    tabSize: 4,
+//                    lineNumbers: false,
+//                    theme: "3024-day",
+//                    extraKeys: {"Enter": "newlineAndIndentContinueMarkdownList"},
+//                    rulers: [{ color: '#ccc', column: 80, lineStyle: 'dashed' }]
 //                });
+//
+//                // CodeMirror does not put any class which could determine
+//                // what language syntax is selected, so we apply such
+//                // class manually.
+//                editor.getWrapperElement().className += ' lang-markdown';
 
                 $(document).on('click', '.save-btn', save);
 
@@ -170,6 +181,7 @@
 
                 if (this.className != '') {
                     this.className = 'language-'+this.className;
+                    this.parentNode.className = this.className;
                 }
 
                 $(codeActionsTmpl)

@@ -29,7 +29,7 @@ abstract class Controller
         return $this->app->response($this->app->render($path, $data), $type, $code, $headers);
     }
 
-    public function jsonResponse(array $array, $type = 'text/html', $code = 200, $headers = [])
+    public function jsonResponse(array $array, $type = 'application/json', $code = 200, $headers = [])
     {
         return $this->app->response(json_encode($array), $type, $code, $headers);
     }

@@ -14,6 +14,8 @@ namespace Maki;
  * @todo nav on mobile
  * @todo make nicer error page for "maki.dev/something.php" url.
  * @todo files in zip archive should not be in full path (/var/www/bla/bla).
+ * @todo light.css links color (orange does not really fit to blue-dark)
+ * @todo tables are not styled at all (they are white!)
  */
 class Maki extends \Pimple
 {

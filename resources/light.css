@@ -178,6 +178,8 @@ NAV
 }
 .nav-inner > ul ul {
     margin-left: 15px;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 .nav-inner a {
     box-sizing: border-box;
@@ -187,28 +189,44 @@ NAV
     padding-bottom: 1px;
     color: #737c84;
 }
+.nav-inner a:hover {
+    text-decoration: underline;
+    color: #afafaf;
+}
+
+.nav-inner h1 {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+}
 .nav-inner h2 {
     margin-top: 20px;
-    color: #fff;
     font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+.nav-inner h3 {
+    margin-top: 20px;
+    font-size: 1rem;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, .15);
+    padding-bottom: 2px;
 }
 .nav-inner h4 {
     text-transform: uppercase;
     font-size: 0.9em;
     font-weight: bold;
+    margin-bottom: 10px;
 }
 .nav-inner h5 {
     font-weight: normal;
     font-size: 0.9em;
     padding-left: 10px;
+    margin-bottom: 10px;
 }
 .nav-inner h6 {
     font-weight: bold !important;
 }
 
-.nav-inner > h1:first-child {
-    margin-bottom: 10px;
-}
+
 
 #page-toc {
     background: #2f99f1;
@@ -471,6 +489,9 @@ pre.CodeMirror-line {
 }
 .editor-preview-side {
     background: #1d2021 !important;
+}
+.cm-tab {
+    width: 20px;
 }
 /*.CodeMirror.lang-markdown .cm-header-1 {*/
     /*font-size: 2rem;*/

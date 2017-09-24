@@ -4,7 +4,7 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://emve.org/maki
  *
- * Compiled at: Sunday 24th of September 2017 09:37:50 PM
+ * Compiled at: Sunday 24th of September 2017 09:48:22 PM
  * Created by: Tomasz "ofca" Zeludziewicz <ofca@emve.org>
  */
 
@@ -3470,7 +3470,7 @@ class Markdown extends \Michelf\MarkdownExtra
 	    }
 	    $table .= '</ul></div>';
 
-        return $this->hashPart(preg_replace('/(?:\n|\A)\[event-toc\]$/xm', $table, $text));
+	    return preg_replace('/(?:\n|\A)\[event-toc\]$/xm', $this->hashPart($table), $text);
     }
 
 	/**

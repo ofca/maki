@@ -32,7 +32,7 @@ class Markdown extends \Michelf\MarkdownExtra
 	    }
 	    $table .= '</ul></div>';
 
-        return $this->hashPart(preg_replace('/(?:\n|\A)\[event-toc\]$/xm', $table, $text));
+	    return preg_replace('/(?:\n|\A)\[event-toc\]$/xm', $this->hashPart($table), $text);
     }
 
 	/**

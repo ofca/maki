@@ -15,7 +15,16 @@ namespace Maki;
  * @todo make nicer error page for "maki.dev/something.php" url.
  * @todo files in zip archive should not be in full path (/var/www/bla/bla).
  * @todo light.css links color (orange does not really fit to blue-dark)
- * @todo tables are not styled at all (they are white!)
+ * @todo who is editing it now
+ * @todo protected pages
+ * @todo multi directory source selector.
+ * @todo add gutter at 80 column. (simplemde by default does not support it).
+ * @todo "saving" button should have some loading indicator when saving is in progress (now you can't tell if saving process is finished or it is still in progress).
+ * @todo blockquote shouldn't be red (or it shoule detect first word, if it is "Important" than background is red, if "Note" that blue, if "Warning" then yellow.
+ * @todo if saving return error 500 it stop saving (don't know what markdown shit return 500 when saving).
+ * @todo Allow renaming directories (whole paths). For example move all from cmscore/ to symfony-v1/cmscore; this should not only move files but also update all pathes in all files.
+ * @todo allow collapse sections and remember it.
+ * @todo allow defining images - in config allow to define custom markup which will be inserting defined image. eg. images: { "icon:preventable": "img/icons/preventable.png" } then in editor  [img:icon:preventable] which will be replaced to markdown ![img:icon:preventable](img/icons/preventable.png).
  */
 class Maki extends \Pimple
 {
@@ -26,6 +35,11 @@ class Maki extends \Pimple
      * @var ThemeManager
      */
     protected $themeManager;
+
+    /**
+     * @var Collection Configuration object.
+     */
+    protected $config;
 
     /**
      * Base container values.
@@ -55,7 +69,7 @@ class Maki extends \Pimple
         session_start();
         $this->sessionId = session_id();
 
-        $config = new Collection($config);
+        $this->config = $config = new Collection($config);
 
         // Document root path must be defined
         if ( ! $config->has('docroot')) {

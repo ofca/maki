@@ -11,6 +11,7 @@ $files = array(
     'vendor/michelf/php-markdown/Michelf/MarkdownExtra.php',
     'vendor/pimple/pimple/lib/Pimple.php',
     'src/Maki/Markdown.php',
+    'src/Maki/Spyc.php',
     'src/Maki/File/Markdown.php',
     'src/Maki/ThemeManager.php',
     'src/Maki/Collection.php',

@@ -141,6 +141,7 @@
                 editor.codemirror.on('change', function() {
                     $saveBtns.removeAttr('disabled');
                 });
+                editor.codemirror.setOption('rulers', [{ color: '#ccc', column: 80, lineStyle: 'dashed' }]);
 
 //                editor = CodeMirror.fromTextArea(document.getElementById("textarea"), {
 //                    mode: 'markdown',
@@ -200,7 +201,8 @@
 
             var toc = $('#page-toc');
             $('#page-toc').toc({
-                container: '.content-inner'
+                container: '.content-inner',
+                selectors: 'h2,h3,h4'
             });
 
             if ($('>ul', toc).is(':empty')) {
@@ -208,13 +210,31 @@
                 // ----
 
                 toc.remove();
-            } else {
+            } else if (toc.length) {
                 // Scroll to nav toc
                 $('.nav')[0].scrollTop = toc.position().top;
-
-                // Remove h1 from toc
-                toc.find('.toc-h1:first').remove();
             }
+
+//            // Toggle headers as it would be sections.
+//            $('body').on('click', 'h1, h2, h3, h4, h5, h6', function() {
+//                var h = $(this),
+//                    visible = !h.hasClass('collapsed');
+//
+//                if (visible) {
+//                    h.addClass('collapsed');
+//                } else {
+//                    h.removeClass('collapsed');
+//                }
+//
+//                h.nextUntil(this.localName).each(function() {
+//                    if (visible) {
+//                        this.setAttribute('data-display', this.style.display);
+//                        this.style.display = 'none';
+//                    } else {
+//                        this.style.display = this.getAttribute('data-display');
+//                    }
+//                });<?php //$app->getCurrentUrl() ?>
+//            });
         </script>
     </body>
 </html>

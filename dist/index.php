@@ -4,7 +4,7 @@
  * This is compiled version of Maki script.
  * For proper source code go to http://emve.org/maki
  *
- * Compiled at: Friday 5th of May 2017 04:52:11 PM
+ * Compiled at: Sunday 24th of September 2017 09:37:50 PM
  * Created by: Tomasz "ofca" Zeludziewicz <ofca@emve.org>
  */
 
@@ -3443,11 +3443,15 @@ namespace Maki {
 class Markdown extends \Michelf\MarkdownExtra
 {
     public $baseUrl;
+	protected $events = [];
 
     public function __construct()
     {
         // doLink is 20, add base url just before
         $this->span_gamut['doBaseUrl'] = 19;
+        $this->span_gamut['doMakiEventToc'] = 20;
+        $this->document_gamut['doMakiEvent'] = 4;
+        $this->block_gamut['doMakiEvent'] = 4;
 
         parent::__construct();
     }
@@ -3457,7 +3461,1270 @@ class Markdown extends \Michelf\MarkdownExtra
         // URLs containing "://" are left untouched
         return preg_replace('~(?<!!)(\[.+?\]\()(?!\w++://)(?!#)(\S*(?:\s*+".+?")?\))~', '$1'.$this->baseUrl.'$2', $text);
     }
+
+    public function doMakiEventToc($text)
+    {
+    	$table = '<div class="event-toc"><span class="event-toc-heading">Events table of contents:</span><ul class="event-toc-list">';
+    	foreach ($this->events as $event) {
+			$table .= '<li><a href="#event-'.$event.'">'.$event.'</a></li>';
+	    }
+	    $table .= '</ul></div>';
+
+        return $this->hashPart(preg_replace('/(?:\n|\A)\[event-toc\]$/xm', $table, $text));
+    }
+
+	/**
+	 * @param $text
+	 * @return mixed
+	 */
+    public function doMakiEvent($text)
+    {
+    	$markdown = new Markdown();
+    	$markdown->baseUrl = $this->baseUrl;
+
+    	$me = $this;
+    	return preg_replace_callback('/
+	            (?:\n|\A)
+	            # 1: Opening marker
+	            ```event           
+	            \s* \n # Whitespace and newline following marker.
+	            # 4: Content
+				(
+					(?>
+						(?!``` [ ]* \n)	# Not a closing marker.
+						.*\n+
+					)+
+				)				
+				# Closing marker.
+				``` \s* (?= \n )
+	        /xm',
+		    function($matches) use ($me, $markdown) {
+    		    $event = Spyc::YAMLLoadString($matches[1]);
+
+    		    $html = "<div class='event'>";
+
+			    if (isset($event['module'])) {
+				    $html .= "<span class='event-module'><span class='event-module-label'>module</span><span class='event-module-name'>{$event['module']}</span></span>";
+			    }
+
+    		    if (isset($event['name'])) {
+			    	$this->events[] = $event['name'];
+			        $html .= "<span class='event-name'><span class='event-name-label'>event name</span><span class='event-name-name'>{$event['name']}</span><a name='event-{$event['name']}' class='event-name-link' href='#{$event['name']}'>#</a></span>";
+		        }
+
+		        if (isset($event['description'])) {
+			    	$desc = $event['description'];
+			    	// Allow description to be markdown.
+			    	$desc = $markdown->transform($desc);
+			    	$html .= "<span class='event-description'>{$desc}</span>";
+		        }
+
+		        if (isset($event['called'])) {
+			    	$html .= "<div class='event-called'><span class='event-called-heading'>Called in</span><ul class='event-called-list'>";
+			    	foreach ($event['called'] as $where) {
+			    		$html .= "<li>{$where}</li>";
+				    }
+			    	$html .= "</ul></div>";
+		        }
+
+		        if (isset($event['arguments'])) {
+		            $html .= "<div class='event-arguments'>
+						<span class='event-arguments-heading'>Arguments</span>
+						<table>
+							<tr>
+								<th class='event-argument-name'>Name</th>
+								<th class='event-argument-type'>Type</th>
+								<th class='event-argument-description'>Description</th>
+							</tr>
+							";
+
+		            foreach ($event['arguments'] as $name => $arg) {
+		                $html .= '<tr>';
+		                $html .= '<td class="event-argument-name">'.$name.'</td>';
+		                $html .= '<td class="event-argument-type">'.$arg['type'].'</td>';
+		                $html .= '<td class="event-argument-description">'.$arg['description'].'</td>';
+		                $html .= '</tr>';
+		            }
+
+			        $html .= "</table></div>";
+		        }
+
+    		    return $this->hashBlock($html);
+		    }, $text);
+    }
 }
+
+}
+
+
+
+
+// src/Maki/Spyc.php
+
+
+
+namespace Maki {
+
+/**
+ * Spyc -- A Simple PHP YAML Class
+ * @version 0.6.2
+ * @author Vlad Andersen <vlad.andersen@gmail.com>
+ * @author Chris Wanstrath <chris@ozmm.org>
+ * @link https://github.com/mustangostang/spyc/
+ * @copyright Copyright 2005-2006 Chris Wanstrath, 2006-2011 Vlad Andersen
+ * @license http://www.opensource.org/licenses/mit-license.php MIT License
+ * @package Spyc
+ */
+
+if (!function_exists('spyc_load')) {
+	/**
+	 * Parses YAML to array.
+	 * @param string $string YAML string.
+	 * @return array
+	 */
+	function spyc_load ($string) {
+		return Spyc::YAMLLoadString($string);
+	}
+}
+
+if (!function_exists('spyc_load_file')) {
+	/**
+	 * Parses YAML to array.
+	 * @param string $file Path to YAML file.
+	 * @return array
+	 */
+	function spyc_load_file ($file) {
+		return Spyc::YAMLLoad($file);
+	}
+}
+
+if (!function_exists('spyc_dump')) {
+	/**
+	 * Dumps array to YAML.
+	 * @param array $data Array.
+	 * @return string
+	 */
+	function spyc_dump ($data) {
+		return Spyc::YAMLDump($data, false, false, true);
+	}
+}
+
+if (!class_exists('Spyc')) {
+
+	/**
+	 * The Simple PHP YAML Class.
+	 *
+	 * This class can be used to read a YAML file and convert its contents
+	 * into a PHP array.  It currently supports a very limited subsection of
+	 * the YAML spec.
+	 *
+	 * Usage:
+	 * <code>
+	 *   $Spyc  = new Spyc;
+	 *   $array = $Spyc->load($file);
+	 * </code>
+	 * or:
+	 * <code>
+	 *   $array = Spyc::YAMLLoad($file);
+	 * </code>
+	 * or:
+	 * <code>
+	 *   $array = spyc_load_file($file);
+	 * </code>
+	 * @package Spyc
+	 */
+	class Spyc {
+
+		// SETTINGS
+
+		const REMPTY = "\0\0\0\0\0";
+
+		/**
+		 * Setting this to true will force YAMLDump to enclose any string value in
+		 * quotes.  False by default.
+		 *
+		 * @var bool
+		 */
+		public $setting_dump_force_quotes = false;
+
+		/**
+		 * Setting this to true will forse YAMLLoad to use syck_load function when
+		 * possible. False by default.
+		 * @var bool
+		 */
+		public $setting_use_syck_is_possible = false;
+
+
+
+		/**#@+
+		 * @access private
+		 * @var mixed
+		 */
+		private $_dumpIndent;
+		private $_dumpWordWrap;
+		private $_containsGroupAnchor = false;
+		private $_containsGroupAlias = false;
+		private $path;
+		private $result;
+		private $LiteralPlaceHolder = '___YAML_Literal_Block___';
+		private $SavedGroups = array();
+		private $indent;
+		/**
+		 * Path modifier that should be applied after adding current element.
+		 * @var array
+		 */
+		private $delayedPath = array();
+
+		/**#@+
+		 * @access public
+		 * @var mixed
+		 */
+		public $_nodeId;
+
+		/**
+		 * Load a valid YAML string to Spyc.
+		 * @param string $input
+		 * @return array
+		 */
+		public function load ($input) {
+			return $this->_loadString($input);
+		}
+
+		/**
+		 * Load a valid YAML file to Spyc.
+		 * @param string $file
+		 * @return array
+		 */
+		public function loadFile ($file) {
+			return $this->_load($file);
+		}
+
+		/**
+		 * Load YAML into a PHP array statically
+		 *
+		 * The load method, when supplied with a YAML stream (string or file),
+		 * will do its best to convert YAML in a file into a PHP array.  Pretty
+		 * simple.
+		 *  Usage:
+		 *  <code>
+		 *   $array = Spyc::YAMLLoad('lucky.yaml');
+		 *   print_r($array);
+		 *  </code>
+		 * @access public
+		 * @return array
+		 * @param string $input Path of YAML file or string containing YAML
+		 */
+		public static function YAMLLoad($input) {
+			$Spyc = new Spyc;
+			return $Spyc->_load($input);
+		}
+
+		/**
+		 * Load a string of YAML into a PHP array statically
+		 *
+		 * The load method, when supplied with a YAML string, will do its best
+		 * to convert YAML in a string into a PHP array.  Pretty simple.
+		 *
+		 * Note: use this function if you don't want files from the file system
+		 * loaded and processed as YAML.  This is of interest to people concerned
+		 * about security whose input is from a string.
+		 *
+		 *  Usage:
+		 *  <code>
+		 *   $array = Spyc::YAMLLoadString("---\n0: hello world\n");
+		 *   print_r($array);
+		 *  </code>
+		 * @access public
+		 * @return array
+		 * @param string $input String containing YAML
+		 */
+		public static function YAMLLoadString($input) {
+			$Spyc = new Spyc;
+			return $Spyc->_loadString($input);
+		}
+
+		/**
+		 * Dump YAML from PHP array statically
+		 *
+		 * The dump method, when supplied with an array, will do its best
+		 * to convert the array into friendly YAML.  Pretty simple.  Feel free to
+		 * save the returned string as nothing.yaml and pass it around.
+		 *
+		 * Oh, and you can decide how big the indent is and what the wordwrap
+		 * for folding is.  Pretty cool -- just pass in 'false' for either if
+		 * you want to use the default.
+		 *
+		 * Indent's default is 2 spaces, wordwrap's default is 40 characters.  And
+		 * you can turn off wordwrap by passing in 0.
+		 *
+		 * @access public
+		 * @return string
+		 * @param array|\stdClass $array PHP array
+		 * @param int $indent Pass in false to use the default, which is 2
+		 * @param int $wordwrap Pass in 0 for no wordwrap, false for default (40)
+		 * @param bool $no_opening_dashes Do not start YAML file with "---\n"
+		 */
+		public static function YAMLDump($array, $indent = false, $wordwrap = false, $no_opening_dashes = false) {
+			$spyc = new Spyc;
+			return $spyc->dump($array, $indent, $wordwrap, $no_opening_dashes);
+		}
+
+
+		/**
+		 * Dump PHP array to YAML
+		 *
+		 * The dump method, when supplied with an array, will do its best
+		 * to convert the array into friendly YAML.  Pretty simple.  Feel free to
+		 * save the returned string as tasteful.yaml and pass it around.
+		 *
+		 * Oh, and you can decide how big the indent is and what the wordwrap
+		 * for folding is.  Pretty cool -- just pass in 'false' for either if
+		 * you want to use the default.
+		 *
+		 * Indent's default is 2 spaces, wordwrap's default is 40 characters.  And
+		 * you can turn off wordwrap by passing in 0.
+		 *
+		 * @access public
+		 * @return string
+		 * @param array $array PHP array
+		 * @param int $indent Pass in false to use the default, which is 2
+		 * @param int $wordwrap Pass in 0 for no wordwrap, false for default (40)
+		 */
+		public function dump($array,$indent = false,$wordwrap = false, $no_opening_dashes = false) {
+			// Dumps to some very clean YAML.  We'll have to add some more features
+			// and options soon.  And better support for folding.
+
+			// New features and options.
+			if ($indent === false or !is_numeric($indent)) {
+				$this->_dumpIndent = 2;
+			} else {
+				$this->_dumpIndent = $indent;
+			}
+
+			if ($wordwrap === false or !is_numeric($wordwrap)) {
+				$this->_dumpWordWrap = 40;
+			} else {
+				$this->_dumpWordWrap = $wordwrap;
+			}
+
+			// New YAML document
+			$string = "";
+			if (!$no_opening_dashes) $string = "---\n";
+
+			// Start at the base of the array and move through it.
+			if ($array) {
+				$array = (array)$array;
+				$previous_key = -1;
+				foreach ($array as $key => $value) {
+					if (!isset($first_key)) $first_key = $key;
+					$string .= $this->_yamlize($key,$value,0,$previous_key, $first_key, $array);
+					$previous_key = $key;
+				}
+			}
+			return $string;
+		}
+
+		/**
+		 * Attempts to convert a key / value array item to YAML
+		 * @access private
+		 * @return string
+		 * @param $key The name of the key
+		 * @param $value The value of the item
+		 * @param $indent The indent of the current node
+		 */
+		private function _yamlize($key,$value,$indent, $previous_key = -1, $first_key = 0, $source_array = null) {
+			if(is_object($value)) $value = (array)$value;
+			if (is_array($value)) {
+				if (empty ($value))
+					return $this->_dumpNode($key, array(), $indent, $previous_key, $first_key, $source_array);
+				// It has children.  What to do?
+				// Make it the right kind of item
+				$string = $this->_dumpNode($key, self::REMPTY, $indent, $previous_key, $first_key, $source_array);
+				// Add the indent
+				$indent += $this->_dumpIndent;
+				// Yamlize the array
+				$string .= $this->_yamlizeArray($value,$indent);
+			} elseif (!is_array($value)) {
+				// It doesn't have children.  Yip.
+				$string = $this->_dumpNode($key, $value, $indent, $previous_key, $first_key, $source_array);
+			}
+			return $string;
+		}
+
+		/**
+		 * Attempts to convert an array to YAML
+		 * @access private
+		 * @return string
+		 * @param $array The array you want to convert
+		 * @param $indent The indent of the current level
+		 */
+		private function _yamlizeArray($array,$indent) {
+			if (is_array($array)) {
+				$string = '';
+				$previous_key = -1;
+				foreach ($array as $key => $value) {
+					if (!isset($first_key)) $first_key = $key;
+					$string .= $this->_yamlize($key, $value, $indent, $previous_key, $first_key, $array);
+					$previous_key = $key;
+				}
+				return $string;
+			} else {
+				return false;
+			}
+		}
+
+		/**
+		 * Returns YAML from a key and a value
+		 * @access private
+		 * @return string
+		 * @param $key The name of the key
+		 * @param $value The value of the item
+		 * @param $indent The indent of the current node
+		 */
+		private function _dumpNode($key, $value, $indent, $previous_key = -1, $first_key = 0, $source_array = null) {
+			// do some folding here, for blocks
+			if (is_string ($value) && ((strpos($value,"\n") !== false || strpos($value,": ") !== false || strpos($value,"- ") !== false ||
+			                            strpos($value,"*") !== false || strpos($value,"#") !== false || strpos($value,"<") !== false || strpos($value,">") !== false || strpos ($value, '%') !== false || strpos ($value, '  ') !== false ||
+			                            strpos($value,"[") !== false || strpos($value,"]") !== false || strpos($value,"{") !== false || strpos($value,"}") !== false) || strpos($value,"&") !== false || strpos($value, "'") !== false || strpos($value, "!") === 0 ||
+			                           substr ($value, -1, 1) == ':')
+			) {
+				$value = $this->_doLiteralBlock($value,$indent);
+			} else {
+				$value  = $this->_doFolding($value,$indent);
+			}
+
+			if ($value === array()) $value = '[ ]';
+			if ($value === "") $value = '""';
+			if (self::isTranslationWord($value)) {
+				$value = $this->_doLiteralBlock($value, $indent);
+			}
+			if (trim ($value) != $value)
+				$value = $this->_doLiteralBlock($value,$indent);
+
+			if (is_bool($value)) {
+				$value = $value ? "true" : "false";
+			}
+
+			if ($value === null) $value = 'null';
+			if ($value === "'" . self::REMPTY . "'") $value = null;
+
+			$spaces = str_repeat(' ',$indent);
+
+			//if (is_int($key) && $key - 1 == $previous_key && $first_key===0) {
+			if (is_array ($source_array) && array_keys($source_array) === range(0, count($source_array) - 1)) {
+				// It's a sequence
+				$string = $spaces.'- '.$value."\n";
+			} else {
+				// if ($first_key===0)  throw new Exception('Keys are all screwy.  The first one was zero, now it\'s "'. $key .'"');
+				// It's mapped
+				if (strpos($key, ":") !== false || strpos($key, "#") !== false) { $key = '"' . $key . '"'; }
+				$string = rtrim ($spaces.$key.': '.$value)."\n";
+			}
+			return $string;
+		}
+
+		/**
+		 * Creates a literal block for dumping
+		 * @access private
+		 * @return string
+		 * @param $value
+		 * @param $indent int The value of the indent
+		 */
+		private function _doLiteralBlock($value,$indent) {
+			if ($value === "\n") return '\n';
+			if (strpos($value, "\n") === false && strpos($value, "'") === false) {
+				return sprintf ("'%s'", $value);
+			}
+			if (strpos($value, "\n") === false && strpos($value, '"') === false) {
+				return sprintf ('"%s"', $value);
+			}
+			$exploded = explode("\n",$value);
+			$newValue = '|';
+			if (isset($exploded[0]) && ($exploded[0] == "|" || $exploded[0] == "|-" || $exploded[0] == ">")) {
+				$newValue = $exploded[0];
+				unset($exploded[0]);
+			}
+			$indent += $this->_dumpIndent;
+			$spaces   = str_repeat(' ',$indent);
+			foreach ($exploded as $line) {
+				$line = trim($line);
+				if (strpos($line, '"') === 0 && strrpos($line, '"') == (strlen($line)-1) || strpos($line, "'") === 0 && strrpos($line, "'") == (strlen($line)-1)) {
+					$line = substr($line, 1, -1);
+				}
+				$newValue .= "\n" . $spaces . ($line);
+			}
+			return $newValue;
+		}
+
+		/**
+		 * Folds a string of text, if necessary
+		 * @access private
+		 * @return string
+		 * @param $value The string you wish to fold
+		 */
+		private function _doFolding($value,$indent) {
+			// Don't do anything if wordwrap is set to 0
+
+			if ($this->_dumpWordWrap !== 0 && is_string ($value) && strlen($value) > $this->_dumpWordWrap) {
+				$indent += $this->_dumpIndent;
+				$indent = str_repeat(' ',$indent);
+				$wrapped = wordwrap($value,$this->_dumpWordWrap,"\n$indent");
+				$value   = ">\n".$indent.$wrapped;
+			} else {
+				if ($this->setting_dump_force_quotes && is_string ($value) && $value !== self::REMPTY)
+					$value = '"' . $value . '"';
+				if (is_numeric($value) && is_string($value))
+					$value = '"' . $value . '"';
+			}
+
+
+			return $value;
+		}
+
+		private function isTrueWord($value) {
+			$words = self::getTranslations(array('true', 'on', 'yes', 'y'));
+			return in_array($value, $words, true);
+		}
+
+		private function isFalseWord($value) {
+			$words = self::getTranslations(array('false', 'off', 'no', 'n'));
+			return in_array($value, $words, true);
+		}
+
+		private function isNullWord($value) {
+			$words = self::getTranslations(array('null', '~'));
+			return in_array($value, $words, true);
+		}
+
+		private function isTranslationWord($value) {
+			return (
+				self::isTrueWord($value)  ||
+				self::isFalseWord($value) ||
+				self::isNullWord($value)
+			);
+		}
+
+		/**
+		 * Coerce a string into a native type
+		 * Reference: http://yaml.org/type/bool.html
+		 * TODO: Use only words from the YAML spec.
+		 * @access private
+		 * @param $value The value to coerce
+		 */
+		private function coerceValue(&$value) {
+			if (self::isTrueWord($value)) {
+				$value = true;
+			} else if (self::isFalseWord($value)) {
+				$value = false;
+			} else if (self::isNullWord($value)) {
+				$value = null;
+			}
+		}
+
+		/**
+		 * Given a set of words, perform the appropriate translations on them to
+		 * match the YAML 1.1 specification for type coercing.
+		 * @param $words The words to translate
+		 * @access private
+		 */
+		private static function getTranslations(array $words) {
+			$result = array();
+			foreach ($words as $i) {
+				$result = array_merge($result, array(ucfirst($i), strtoupper($i), strtolower($i)));
+			}
+			return $result;
+		}
+
+// LOADING FUNCTIONS
+
+		private function _load($input) {
+			$Source = $this->loadFromSource($input);
+			return $this->loadWithSource($Source);
+		}
+
+		private function _loadString($input) {
+			$Source = $this->loadFromString($input);
+			return $this->loadWithSource($Source);
+		}
+
+		private function loadWithSource($Source) {
+			if (empty ($Source)) return array();
+			if ($this->setting_use_syck_is_possible && function_exists ('syck_load')) {
+				$array = syck_load (implode ("\n", $Source));
+				return is_array($array) ? $array : array();
+			}
+
+			$this->path = array();
+			$this->result = array();
+
+			$cnt = count($Source);
+			for ($i = 0; $i < $cnt; $i++) {
+				$line = $Source[$i];
+
+				$this->indent = strlen($line) - strlen(ltrim($line));
+				$tempPath = $this->getParentPathByIndent($this->indent);
+				$line = self::stripIndent($line, $this->indent);
+				if (self::isComment($line)) continue;
+				if (self::isEmpty($line)) continue;
+				$this->path = $tempPath;
+
+				$literalBlockStyle = self::startsLiteralBlock($line);
+				if ($literalBlockStyle) {
+					$line = rtrim ($line, $literalBlockStyle . " \n");
+					$literalBlock = '';
+					$line .= ' '.$this->LiteralPlaceHolder;
+					$literal_block_indent = strlen($Source[$i+1]) - strlen(ltrim($Source[$i+1]));
+					while (++$i < $cnt && $this->literalBlockContinues($Source[$i], $this->indent)) {
+						$literalBlock = $this->addLiteralLine($literalBlock, $Source[$i], $literalBlockStyle, $literal_block_indent);
+					}
+					$i--;
+				}
+
+				// Strip out comments
+				if (strpos ($line, '#')) {
+					$line = preg_replace('/\s*#([^"\']+)$/','',$line);
+				}
+
+				while (++$i < $cnt && self::greedilyNeedNextLine($line)) {
+					$line = rtrim ($line, " \n\t\r") . ' ' . ltrim ($Source[$i], " \t");
+				}
+				$i--;
+
+				$lineArray = $this->_parseLine($line);
+
+				if ($literalBlockStyle)
+					$lineArray = $this->revertLiteralPlaceHolder ($lineArray, $literalBlock);
+
+				$this->addArray($lineArray, $this->indent);
+
+				foreach ($this->delayedPath as $indent => $delayedPath)
+					$this->path[$indent] = $delayedPath;
+
+				$this->delayedPath = array();
+
+			}
+			return $this->result;
+		}
+
+		private function loadFromSource ($input) {
+			if (!empty($input) && strpos($input, "\n") === false && file_exists($input))
+				$input = file_get_contents($input);
+
+			return $this->loadFromString($input);
+		}
+
+		private function loadFromString ($input) {
+			$lines = explode("\n",$input);
+			foreach ($lines as $k => $_) {
+				$lines[$k] = rtrim ($_, "\r");
+			}
+			return $lines;
+		}
+
+		/**
+		 * Parses YAML code and returns an array for a node
+		 * @access private
+		 * @return array
+		 * @param string $line A line from the YAML file
+		 */
+		private function _parseLine($line) {
+			if (!$line) return array();
+			$line = trim($line);
+			if (!$line) return array();
+
+			$array = array();
+
+			$group = $this->nodeContainsGroup($line);
+			if ($group) {
+				$this->addGroup($line, $group);
+				$line = $this->stripGroup ($line, $group);
+			}
+
+			if ($this->startsMappedSequence($line))
+				return $this->returnMappedSequence($line);
+
+			if ($this->startsMappedValue($line))
+				return $this->returnMappedValue($line);
+
+			if ($this->isArrayElement($line))
+				return $this->returnArrayElement($line);
+
+			if ($this->isPlainArray($line))
+				return $this->returnPlainArray($line);
+
+
+			return $this->returnKeyValuePair($line);
+
+		}
+
+		/**
+		 * Finds the type of the passed value, returns the value as the new type.
+		 * @access private
+		 * @param string $value
+		 * @return mixed
+		 */
+		private function _toType($value) {
+			if ($value === '') return "";
+			$first_character = $value[0];
+			$last_character = substr($value, -1, 1);
+
+			$is_quoted = false;
+			do {
+				if (!$value) break;
+				if ($first_character != '"' && $first_character != "'") break;
+				if ($last_character != '"' && $last_character != "'") break;
+				$is_quoted = true;
+			} while (0);
+
+			if ($is_quoted) {
+				$value = str_replace('\n', "\n", $value);
+				if ($first_character == "'")
+					return strtr(substr ($value, 1, -1), array ('\'\'' => '\'', '\\\''=> '\''));
+				return strtr(substr ($value, 1, -1), array ('\\"' => '"', '\\\''=> '\''));
+			}
+
+			if (strpos($value, ' #') !== false && !$is_quoted)
+				$value = preg_replace('/\s+#(.+)$/','',$value);
+
+			if ($first_character == '[' && $last_character == ']') {
+				// Take out strings sequences and mappings
+				$innerValue = trim(substr ($value, 1, -1));
+				if ($innerValue === '') return array();
+				$explode = $this->_inlineEscape($innerValue);
+				// Propagate value array
+				$value  = array();
+				foreach ($explode as $v) {
+					$value[] = $this->_toType($v);
+				}
+				return $value;
+			}
+
+			if (strpos($value,': ')!==false && $first_character != '{') {
+				$array = explode(': ',$value);
+				$key   = trim($array[0]);
+				array_shift($array);
+				$value = trim(implode(': ',$array));
+				$value = $this->_toType($value);
+				return array($key => $value);
+			}
+
+			if ($first_character == '{' && $last_character == '}') {
+				$innerValue = trim(substr ($value, 1, -1));
+				if ($innerValue === '') return array();
+				// Inline Mapping
+				// Take out strings sequences and mappings
+				$explode = $this->_inlineEscape($innerValue);
+				// Propagate value array
+				$array = array();
+				foreach ($explode as $v) {
+					$SubArr = $this->_toType($v);
+					if (empty($SubArr)) continue;
+					if (is_array ($SubArr)) {
+						$array[key($SubArr)] = $SubArr[key($SubArr)]; continue;
+					}
+					$array[] = $SubArr;
+				}
+				return $array;
+			}
+
+			if ($value == 'null' || $value == 'NULL' || $value == 'Null' || $value == '' || $value == '~') {
+				return null;
+			}
+
+			if ( is_numeric($value) && preg_match ('/^(-|)[1-9]+[0-9]*$/', $value) ){
+				$intvalue = (int)$value;
+				if ($intvalue != PHP_INT_MAX && $intvalue != ~PHP_INT_MAX)
+					$value = $intvalue;
+				return $value;
+			}
+
+			if ( is_string($value) && preg_match('/^0[xX][0-9a-fA-F]+$/', $value)) {
+				// Hexadecimal value.
+				return hexdec($value);
+			}
+
+			$this->coerceValue($value);
+
+			if (is_numeric($value)) {
+				if ($value === '0') return 0;
+				if (rtrim ($value, 0) === $value)
+					$value = (float)$value;
+				return $value;
+			}
+
+			return $value;
+		}
+
+		/**
+		 * Used in inlines to check for more inlines or quoted strings
+		 * @access private
+		 * @return array
+		 */
+		private function _inlineEscape($inline) {
+			// There's gotta be a cleaner way to do this...
+			// While pure sequences seem to be nesting just fine,
+			// pure mappings and mappings with sequences inside can't go very
+			// deep.  This needs to be fixed.
+
+			$seqs = array();
+			$maps = array();
+			$saved_strings = array();
+			$saved_empties = array();
+
+			// Check for empty strings
+			$regex = '/("")|(\'\')/';
+			if (preg_match_all($regex,$inline,$strings)) {
+				$saved_empties = $strings[0];
+				$inline  = preg_replace($regex,'YAMLEmpty',$inline);
+			}
+			unset($regex);
+
+			// Check for strings
+			$regex = '/(?:(")|(?:\'))((?(1)[^"]+|[^\']+))(?(1)"|\')/';
+			if (preg_match_all($regex,$inline,$strings)) {
+				$saved_strings = $strings[0];
+				$inline  = preg_replace($regex,'YAMLString',$inline);
+			}
+			unset($regex);
+
+			// echo $inline;
+
+			$i = 0;
+			do {
+
+				// Check for sequences
+				while (preg_match('/\[([^{}\[\]]+)\]/U',$inline,$matchseqs)) {
+					$seqs[] = $matchseqs[0];
+					$inline = preg_replace('/\[([^{}\[\]]+)\]/U', ('YAMLSeq' . (count($seqs) - 1) . 's'), $inline, 1);
+				}
+
+				// Check for mappings
+				while (preg_match('/{([^\[\]{}]+)}/U',$inline,$matchmaps)) {
+					$maps[] = $matchmaps[0];
+					$inline = preg_replace('/{([^\[\]{}]+)}/U', ('YAMLMap' . (count($maps) - 1) . 's'), $inline, 1);
+				}
+
+				if ($i++ >= 10) break;
+
+			} while (strpos ($inline, '[') !== false || strpos ($inline, '{') !== false);
+
+			$explode = explode(',',$inline);
+			$explode = array_map('trim', $explode);
+			$stringi = 0; $i = 0;
+
+			while (1) {
+
+				// Re-add the sequences
+				if (!empty($seqs)) {
+					foreach ($explode as $key => $value) {
+						if (strpos($value,'YAMLSeq') !== false) {
+							foreach ($seqs as $seqk => $seq) {
+								$explode[$key] = str_replace(('YAMLSeq'.$seqk.'s'),$seq,$value);
+								$value = $explode[$key];
+							}
+						}
+					}
+				}
+
+				// Re-add the mappings
+				if (!empty($maps)) {
+					foreach ($explode as $key => $value) {
+						if (strpos($value,'YAMLMap') !== false) {
+							foreach ($maps as $mapk => $map) {
+								$explode[$key] = str_replace(('YAMLMap'.$mapk.'s'), $map, $value);
+								$value = $explode[$key];
+							}
+						}
+					}
+				}
+
+
+				// Re-add the strings
+				if (!empty($saved_strings)) {
+					foreach ($explode as $key => $value) {
+						while (strpos($value,'YAMLString') !== false) {
+							$explode[$key] = preg_replace('/YAMLString/',$saved_strings[$stringi],$value, 1);
+							unset($saved_strings[$stringi]);
+							++$stringi;
+							$value = $explode[$key];
+						}
+					}
+				}
+
+
+				// Re-add the empties
+				if (!empty($saved_empties)) {
+					foreach ($explode as $key => $value) {
+						while (strpos($value,'YAMLEmpty') !== false) {
+							$explode[$key] = preg_replace('/YAMLEmpty/', '', $value, 1);
+							$value = $explode[$key];
+						}
+					}
+				}
+
+				$finished = true;
+				foreach ($explode as $key => $value) {
+					if (strpos($value,'YAMLSeq') !== false) {
+						$finished = false; break;
+					}
+					if (strpos($value,'YAMLMap') !== false) {
+						$finished = false; break;
+					}
+					if (strpos($value,'YAMLString') !== false) {
+						$finished = false; break;
+					}
+					if (strpos($value,'YAMLEmpty') !== false) {
+						$finished = false; break;
+					}
+				}
+				if ($finished) break;
+
+				$i++;
+				if ($i > 10)
+					break; // Prevent infinite loops.
+			}
+
+
+			return $explode;
+		}
+
+		private function literalBlockContinues ($line, $lineIndent) {
+			if (!trim($line)) return true;
+			if (strlen($line) - strlen(ltrim($line)) > $lineIndent) return true;
+			return false;
+		}
+
+		private function referenceContentsByAlias ($alias) {
+			do {
+				if (!isset($this->SavedGroups[$alias])) { echo "Bad group name: $alias."; break; }
+				$groupPath = $this->SavedGroups[$alias];
+				$value = $this->result;
+				foreach ($groupPath as $k) {
+					$value = $value[$k];
+				}
+			} while (false);
+			return $value;
+		}
+
+		private function addArrayInline ($array, $indent) {
+			$CommonGroupPath = $this->path;
+			if (empty ($array)) return false;
+
+			foreach ($array as $k => $_) {
+				$this->addArray(array($k => $_), $indent);
+				$this->path = $CommonGroupPath;
+			}
+			return true;
+		}
+
+		private function addArray ($incoming_data, $incoming_indent) {
+
+			// print_r ($incoming_data);
+
+			if (count ($incoming_data) > 1)
+				return $this->addArrayInline ($incoming_data, $incoming_indent);
+
+			$key = key ($incoming_data);
+			$value = isset($incoming_data[$key]) ? $incoming_data[$key] : null;
+			if ($key === '__!YAMLZero') $key = '0';
+
+			if ($incoming_indent == 0 && !$this->_containsGroupAlias && !$this->_containsGroupAnchor) { // Shortcut for root-level values.
+				if ($key || $key === '' || $key === '0') {
+					$this->result[$key] = $value;
+				} else {
+					$this->result[] = $value; end ($this->result); $key = key ($this->result);
+				}
+				$this->path[$incoming_indent] = $key;
+				return;
+			}
+
+
+
+			$history = array();
+			// Unfolding inner array tree.
+			$history[] = $_arr = $this->result;
+			foreach ($this->path as $k) {
+				$history[] = $_arr = $_arr[$k];
+			}
+
+			if ($this->_containsGroupAlias) {
+				$value = $this->referenceContentsByAlias($this->_containsGroupAlias);
+				$this->_containsGroupAlias = false;
+			}
+
+
+			// Adding string or numeric key to the innermost level or $this->arr.
+			if (is_string($key) && $key == '<<') {
+				if (!is_array ($_arr)) { $_arr = array (); }
+
+				$_arr = array_merge ($_arr, $value);
+			} else if ($key || $key === '' || $key === '0') {
+				if (!is_array ($_arr))
+					$_arr = array ($key=>$value);
+				else
+					$_arr[$key] = $value;
+			} else {
+				if (!is_array ($_arr)) { $_arr = array ($value); $key = 0; }
+				else { $_arr[] = $value; end ($_arr); $key = key ($_arr); }
+			}
+
+			$reverse_path = array_reverse($this->path);
+			$reverse_history = array_reverse ($history);
+			$reverse_history[0] = $_arr;
+			$cnt = count($reverse_history) - 1;
+			for ($i = 0; $i < $cnt; $i++) {
+				$reverse_history[$i+1][$reverse_path[$i]] = $reverse_history[$i];
+			}
+			$this->result = $reverse_history[$cnt];
+
+			$this->path[$incoming_indent] = $key;
+
+			if ($this->_containsGroupAnchor) {
+				$this->SavedGroups[$this->_containsGroupAnchor] = $this->path;
+				if (is_array ($value)) {
+					$k = key ($value);
+					if (!is_int ($k)) {
+						$this->SavedGroups[$this->_containsGroupAnchor][$incoming_indent + 2] = $k;
+					}
+				}
+				$this->_containsGroupAnchor = false;
+			}
+
+		}
+
+		private static function startsLiteralBlock ($line) {
+			$lastChar = substr (trim($line), -1);
+			if ($lastChar != '>' && $lastChar != '|') return false;
+			if ($lastChar == '|') return $lastChar;
+			// HTML tags should not be counted as literal blocks.
+			if (preg_match ('#<.*?>$#', $line)) return false;
+			return $lastChar;
+		}
+
+		private static function greedilyNeedNextLine($line) {
+			$line = trim ($line);
+			if (!strlen($line)) return false;
+			if (substr ($line, -1, 1) == ']') return false;
+			if ($line[0] == '[') return true;
+			if (preg_match ('#^[^:]+?:\s*\[#', $line)) return true;
+			return false;
+		}
+
+		private function addLiteralLine ($literalBlock, $line, $literalBlockStyle, $indent = -1) {
+			$line = self::stripIndent($line, $indent);
+			if ($literalBlockStyle !== '|') {
+				$line = self::stripIndent($line);
+			}
+			$line = rtrim ($line, "\r\n\t ") . "\n";
+			if ($literalBlockStyle == '|') {
+				return $literalBlock . $line;
+			}
+			if (strlen($line) == 0)
+				return rtrim($literalBlock, ' ') . "\n";
+			if ($line == "\n" && $literalBlockStyle == '>') {
+				return rtrim ($literalBlock, " \t") . "\n";
+			}
+			if ($line != "\n")
+				$line = trim ($line, "\r\n ") . " ";
+			return $literalBlock . $line;
+		}
+
+		function revertLiteralPlaceHolder ($lineArray, $literalBlock) {
+			foreach ($lineArray as $k => $_) {
+				if (is_array($_))
+					$lineArray[$k] = $this->revertLiteralPlaceHolder ($_, $literalBlock);
+				else if (substr($_, -1 * strlen ($this->LiteralPlaceHolder)) == $this->LiteralPlaceHolder)
+					$lineArray[$k] = rtrim ($literalBlock, " \r\n");
+			}
+			return $lineArray;
+		}
+
+		private static function stripIndent ($line, $indent = -1) {
+			if ($indent == -1) $indent = strlen($line) - strlen(ltrim($line));
+			return substr ($line, $indent);
+		}
+
+		private function getParentPathByIndent ($indent) {
+			if ($indent == 0) return array();
+			$linePath = $this->path;
+			do {
+				end($linePath); $lastIndentInParentPath = key($linePath);
+				if ($indent <= $lastIndentInParentPath) array_pop ($linePath);
+			} while ($indent <= $lastIndentInParentPath);
+			return $linePath;
+		}
+
+
+		private function clearBiggerPathValues ($indent) {
+
+
+			if ($indent == 0) $this->path = array();
+			if (empty ($this->path)) return true;
+
+			foreach ($this->path as $k => $_) {
+				if ($k > $indent) unset ($this->path[$k]);
+			}
+
+			return true;
+		}
+
+
+		private static function isComment ($line) {
+			if (!$line) return false;
+			if ($line[0] == '#') return true;
+			if (trim($line, " \r\n\t") == '---') return true;
+			return false;
+		}
+
+		private static function isEmpty ($line) {
+			return (trim ($line) === '');
+		}
+
+
+		private function isArrayElement ($line) {
+			if (!$line || !is_scalar($line)) return false;
+			if (substr($line, 0, 2) != '- ') return false;
+			if (strlen ($line) > 3)
+				if (substr($line,0,3) == '---') return false;
+
+			return true;
+		}
+
+		private function isHashElement ($line) {
+			return strpos($line, ':');
+		}
+
+		private function isLiteral ($line) {
+			if ($this->isArrayElement($line)) return false;
+			if ($this->isHashElement($line)) return false;
+			return true;
+		}
+
+
+		private static function unquote ($value) {
+			if (!$value) return $value;
+			if (!is_string($value)) return $value;
+			if ($value[0] == '\'') return trim ($value, '\'');
+			if ($value[0] == '"') return trim ($value, '"');
+			return $value;
+		}
+
+		private function startsMappedSequence ($line) {
+			return (substr($line, 0, 2) == '- ' && substr ($line, -1, 1) == ':');
+		}
+
+		private function returnMappedSequence ($line) {
+			$array = array();
+			$key         = self::unquote(trim(substr($line,1,-1)));
+			$array[$key] = array();
+			$this->delayedPath = array(strpos ($line, $key) + $this->indent => $key);
+			return array($array);
+		}
+
+		private function checkKeysInValue($value) {
+			if (strchr('[{"\'', $value[0]) === false) {
+				if (strchr($value, ': ') !== false) {
+					throw new Exception('Too many keys: '.$value);
+				}
+			}
+		}
+
+		private function returnMappedValue ($line) {
+			$this->checkKeysInValue($line);
+			$array = array();
+			$key         = self::unquote (trim(substr($line,0,-1)));
+			$array[$key] = '';
+			return $array;
+		}
+
+		private function startsMappedValue ($line) {
+			return (substr ($line, -1, 1) == ':');
+		}
+
+		private function isPlainArray ($line) {
+			return ($line[0] == '[' && substr ($line, -1, 1) == ']');
+		}
+
+		private function returnPlainArray ($line) {
+			return $this->_toType($line);
+		}
+
+		private function returnKeyValuePair ($line) {
+			$array = array();
+			$key = '';
+			if (strpos ($line, ': ')) {
+				// It's a key/value pair most likely
+				// If the key is in double quotes pull it out
+				if (($line[0] == '"' || $line[0] == "'") && preg_match('/^(["\'](.*)["\'](\s)*:)/',$line,$matches)) {
+					$value = trim(str_replace($matches[1],'',$line));
+					$key   = $matches[2];
+				} else {
+					// Do some guesswork as to the key and the value
+					$explode = explode(': ', $line);
+					$key     = trim(array_shift($explode));
+					$value   = trim(implode(': ', $explode));
+					$this->checkKeysInValue($value);
+				}
+				// Set the type of the value.  Int, string, etc
+				$value = $this->_toType($value);
+				if ($key === '0') $key = '__!YAMLZero';
+				$array[$key] = $value;
+			} else {
+				$array = array ($line);
+			}
+			return $array;
+
+		}
+
+
+		private function returnArrayElement ($line) {
+			if (strlen($line) <= 1) return array(array()); // Weird %)
+			$array = array();
+			$value   = trim(substr($line,1));
+			$value   = $this->_toType($value);
+			if ($this->isArrayElement($value)) {
+				$value = $this->returnArrayElement($value);
+			}
+			$array[] = $value;
+			return $array;
+		}
+
+
+		private function nodeContainsGroup ($line) {
+			$symbolsForReference = 'A-z0-9_\-';
+			if (strpos($line, '&') === false && strpos($line, '*') === false) return false; // Please die fast ;-)
+			if ($line[0] == '&' && preg_match('/^(&['.$symbolsForReference.']+)/', $line, $matches)) return $matches[1];
+			if ($line[0] == '*' && preg_match('/^(\*['.$symbolsForReference.']+)/', $line, $matches)) return $matches[1];
+			if (preg_match('/(&['.$symbolsForReference.']+)$/', $line, $matches)) return $matches[1];
+			if (preg_match('/(\*['.$symbolsForReference.']+$)/', $line, $matches)) return $matches[1];
+			if (preg_match ('#^\s*<<\s*:\s*(\*[^\s]+).*$#', $line, $matches)) return $matches[1];
+			return false;
+
+		}
+
+		private function addGroup ($line, $group) {
+			if ($group[0] == '&') $this->_containsGroupAnchor = substr ($group, 1);
+			if ($group[0] == '*') $this->_containsGroupAlias = substr ($group, 1);
+			//print_r ($this->path);
+		}
+
+		private function stripGroup ($line, $group) {
+			$line = trim(str_replace($group, '', $line));
+			return $line;
+		}
+	}
+}
+
+// Enable use of Spyc from command line
+// The syntax is the following: php Spyc.php spyc.yaml
+
+do {
+	if (PHP_SAPI != 'cli') break;
+	if (empty ($_SERVER['argc']) || $_SERVER['argc'] < 2) break;
+	if (empty ($_SERVER['PHP_SELF']) || FALSE === strpos ($_SERVER['PHP_SELF'], 'Spyc.php') ) break;
+	$file = $argv[1];
+	echo json_encode (spyc_load_file ($file));
+} while (0);
 
 }
 
@@ -4264,6 +5531,17 @@ namespace Maki {
  * @todo nav on mobile
  * @todo make nicer error page for "maki.dev/something.php" url.
  * @todo files in zip archive should not be in full path (/var/www/bla/bla).
+ * @todo light.css links color (orange does not really fit to blue-dark)
+ * @todo who is editing it now
+ * @todo protected pages
+ * @todo multi directory source selector.
+ * @todo add gutter at 80 column. (simplemde by default does not support it).
+ * @todo "saving" button should have some loading indicator when saving is in progress (now you can't tell if saving process is finished or it is still in progress).
+ * @todo blockquote shouldn't be red (or it shoule detect first word, if it is "Important" than background is red, if "Note" that blue, if "Warning" then yellow.
+ * @todo if saving return error 500 it stop saving (don't know what markdown shit return 500 when saving).
+ * @todo Allow renaming directories (whole paths). For example move all from cmscore/ to symfony-v1/cmscore; this should not only move files but also update all pathes in all files.
+ * @todo allow collapse sections and remember it.
+ * @todo allow defining images - in config allow to define custom markup which will be inserting defined image. eg. images: { "icon:preventable": "img/icons/preventable.png" } then in editor  [img:icon:preventable] which will be replaced to markdown ![img:icon:preventable](img/icons/preventable.png).
  */
 class Maki extends \Pimple
 {
@@ -4274,6 +5552,11 @@ class Maki extends \Pimple
      * @var ThemeManager
      */
     protected $themeManager;
+
+    /**
+     * @var Collection Configuration object.
+     */
+    protected $config;
 
     /**
      * Base container values.
@@ -4303,7 +5586,7 @@ class Maki extends \Pimple
         session_start();
         $this->sessionId = session_id();
 
-        $config = new Collection($config);
+        $this->config = $config = new Collection($config);
 
         // Document root path must be defined
         if ( ! $config->has('docroot')) {
@@ -4890,7 +6173,7 @@ function resource_88b57a5c8ca3926b82c144324e9c01a2() {
 
 
 function resource_b5224402a7c86bd91173aa4a45d1b751() {
-    return base64_decode('QGltcG9ydCB1cmwoJ2h0dHBzOi8vZm9udHMuZ29vZ2xlYXBpcy5jb20vY3NzP2ZhbWlseT1MYXRvOjMwMCw0MDAsNDAwaSw3MDAsOTAwJnN1YnNldD1sYXRpbi1leHQnKTsKLyogVXNlZCBieSBwcmlzbWpzICovCkBpbXBvcnQgdXJsKCdodHRwczovL2ZvbnRzLmdvb2dsZWFwaXMuY29tL2Nzcz9mYW1pbHk9Q291c2luZSZzdWJzZXQ9bGF0aW4tZXh0Jyk7CgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KREVGQVVMVFMKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovCmh0bWwsYm9keSxkaXYsc3BhbixhcHBsZXQsb2JqZWN0LGlmcmFtZSxoMSxoMixoMyxoNCxoNSxoNixwLGJsb2NrcXVvdGUscHJlLGEsYWJiciwKYWNyb255bSxhZGRyZXNzLGJpZyxjaXRlLGNvZGUsZGVsLGRmbixlbSxpbWcsaW5zLGtiZCxxLHMsc2FtcCxzbWFsbCxzdHJpa2Usc3Ryb25nLApzdWIsc3VwLHR0LHZhcixkbCxkdCxkZCxvbCx1bCxsaSxmaWVsZHNldCxmb3JtLGxhYmVsLGxlZ2VuZCx0YWJsZSxjYXB0aW9uLHRib2R5LAp0Zm9vdCx0aGVhZCx0cix0aCx0ZCB7CiAgICBtYXJnaW46IDA7CiAgICBwYWRkaW5nOiAwOwogICAgYm9yZGVyOiAwOwogICAgb3V0bGluZTogMDsKICAgIGZvbnQtd2VpZ2h0OiBpbmhlcml0OwogICAgZm9udC1zdHlsZTogaW5oZXJpdDsKICAgIGZvbnQtZmFtaWx5OiAnTGF0bycsIHNhbnMtc2VyaWY7CiAgICBmb250LXNpemU6IDEwMCU7CiAgICB2ZXJ0aWNhbC1hbGlnbjogYmFzZWxpbmU7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94Owp9Cmh0bWwgewogICAgb3ZlcmZsb3cteDogaGlkZGVuOwogICAgaGVpZ2h0OiAxMDAlOwp9CmJvZHkgewogICAgbGluZS1oZWlnaHQ6IDE7CiAgICBjb2xvcjogIzAwMDsKICAgIGJhY2tncm91bmQ6ICMxZDIwMjE7CiAgICBoZWlnaHQ6IDEwMCU7CiAgICBtYXJnaW4tdG9wOiAzMHB4Owp9Cm9sLCB1bCB7CiAgICBsaXN0LXN0eWxlOiBub25lOwp9CnRhYmxlIHsKICAgIGJvcmRlci1jb2xsYXBzZTogc2VwYXJhdGU7CiAgICBib3JkZXItc3BhY2luZzogMDsKICAgIHZlcnRpY2FsLWFsaWduOiBtaWRkbGU7Cn0KY2FwdGlvbiwgdGgsIHRkIHsKICAgIHRleHQtYWxpZ246IGxlZnQ7CiAgICBmb250LXdlaWdodDogbm9ybWFsOwogICAgdmVydGljYWwtYWxpZ246IG1pZGRsZTsKfQphIGltZyB7CiAgICBib3JkZXI6IG5vbmU7Cn0KaHIgewogICAgYm9yZGVyOiAwOwogICAgYm9yZGVyLWJvdHRvbTogMXB4IGRhc2hlZCAjM2YzZjNmOwp9Ci5idG4gewogICAgbWFyZ2luLXJpZ2h0OiA2cHg7CiAgICBjdXJzb3I6IHBvaW50ZXI7CiAgICB0ZXh0LXRyYW5zZm9ybTogdXBwZXJjYXNlOwogICAgZm9udC1zaXplOiAuN3JlbTsKICAgIGJvcmRlci1yYWRpdXM6IDRweDsKICAgIHBhZGRpbmc6IDZweCAxMnB4OwogICAgdGV4dC1zaGFkb3c6IDBweCAxcHggMXB4IHJnYmEoMTUwLCAxNTAsIDE1MCwgMSk7CiAgICBib3JkZXItYm90dG9tOiAxcHggc29saWQgcmdiYSgyNTUsIDI1NSwgMjU1LCAuNCk7CiAgICBjb2xvcjogI2ZmZiAhaW1wb3J0YW50OwogICAgdGV4dC1kZWNvcmF0aW9uOiBub25lICFpbXBvcnRhbnQ7Cn0KLmJ0bltkaXNhYmxlZF0gewogICAgYmFja2dyb3VuZDogZ3JheSAhaW1wb3J0YW50OwogICAgY3Vyc29yOiBkZWZhdWx0ICFpbXBvcnRhbnQ7Cn0KLmJ0bjpob3ZlciB7CiAgICBjb2xvcjogI2ZmZiAhaW1wb3J0YW50Owp9Ci5idG4taW5mbyB7CiAgICBiYWNrZ3JvdW5kOiAjMjE5NkYzOwp9Ci5idG4taW5mbzpob3ZlciB7CiAgICBiYWNrZ3JvdW5kOiAjMmFhY2ZmOwp9Ci5idG4tc3VjY2VzcyB7CiAgICBiYWNrZ3JvdW5kOiAjOEJDMzRBOwp9Ci5idG4tc3VjY2Vzczpob3ZlciB7CiAgICBiYWNrZ3JvdW5kOiAjYTVlNDUxOwp9Ci5idG4tZGFuZ2VyIHsKICAgIGJhY2tncm91bmQ6ICNkMTJiMzc7Cn0KLmJ0bi1kYW5nZXI6aG92ZXIgewogICAgYmFja2dyb3VuZDogI2ZiMzE0MTsKfQoKLyogLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCkZPTlRTIERFRkFVTFRTCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwpib2R5LAp0ZCwKdGV4dGFyZWEKewogICAgbGluZS1oZWlnaHQ6IDEuNjsKICAgIGZvbnQtc2l6ZTogMWVtOwogICAgY29sb3I6ICNmZmY7Cn0KYSB7CiAgICBjb2xvcjogI2ZmZjsKICAgIHRleHQtZGVjb3JhdGlvbjogbm9uZTsKfQphOmhvdmVyIHsKICAgIGNvbG9yOiAjODBjOWZmOwp9CmgxLCBoMiwgaDMsIGg0LCBoNSwgaDYgewogICAgZm9udC13ZWlnaHQ6IGJvbGQ7Cn0KCgoKCgoKLmNvbnRlbnQgLmJyZWFkY3J1bWIgewogICAgbWFyZ2luOiAwIC0xNXB4IDIwcHggLTE1cHggIWltcG9ydGFudDsKICAgIGZvbnQtc2l6ZTogLjllbTsKICAgIHBhZGRpbmc6IDNweCAxNXB4OwogICAgbGlzdC1zdHlsZTogbm9uZTsKfQouY29udGVudCBhIHsKICAgIGNvbG9yOiAjRkY1NzIyOwogICAgdGV4dC1kZWNvcmF0aW9uOiB1bmRlcmxpbmU7Cn0KLmJyZWFkY3J1bWIgLmFjdGl2ZSBhIHsKICAgIGNvbG9yOiAjODBjOWZmOwp9Ci5icmVhZGNydW1iPmxpIHsKICAgIGRpc3BsYXk6IGlubGluZS1ibG9jazsKfQouYnJlYWRjcnVtYj5saStsaTpiZWZvcmUgewogICAgY29udGVudDogIi9cMDBhMCI7CiAgICBwYWRkaW5nOiAwIDVweDsKICAgIGNvbG9yOiAjY2NjOwp9CgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KSEVBREVSCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwouaGVhZGVyIHsKICAgIHBhZGRpbmc6IDVweCAxMHB4OwogICAgY29sb3I6ICNmZmY7CiAgICBwb3NpdGlvbjogZml4ZWQ7CiAgICB0b3A6IDA7CiAgICBsZWZ0OiAwOwogICAgd2lkdGg6IDEwMCU7CiAgICB6LWluZGV4OiA5OTk5OwogICAgYmFja2dyb3VuZDogI2ZmZjsKICAgIGNsZWFyOiBib3RoOwp9CgouaGVhZGVyIGgyIHsKICAgIGZsb2F0OiBsZWZ0OwogICAgY29sb3I6ICMwMDA7Cn0KCi51c2VyLWFjdGlvbnMgewogICAgZmxvYXQ6IHJpZ2h0OwogICAgbWFyZ2luLXJpZ2h0OiAyMHB4Owp9CgoudXNlci1hY3Rpb25zIGEgewogICAgY29sb3I6ICMwMDA7Cn0KCi8qIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpOQVYKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovCi5uYXYgewogICAgZm9udC1zaXplOiAwLjllbTsKfQoubmF2LWlubmVyIHsKICAgIHBhZGRpbmc6IDJyZW07Cn0KLm5hdi1pbm5lciA+IHVsIHVsIHsKICAgIG1hcmdpbi1sZWZ0OiAxNXB4OwogICAgbWFyZ2luLXRvcDogNXB4OwogICAgbWFyZ2luLWJvdHRvbTogNXB4Owp9Ci5uYXYtaW5uZXIgYSB7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94OwogICAgcG9zaXRpb246IHJlbGF0aXZlOwogICAgZGlzcGxheTogYmxvY2s7CiAgICBwYWRkaW5nLXRvcDogMXB4OwogICAgcGFkZGluZy1ib3R0b206IDFweDsKICAgIGNvbG9yOiAjNzM3Yzg0Owp9Ci5uYXYtaW5uZXIgYTpob3ZlciB7CiAgICB0ZXh0LWRlY29yYXRpb246IHVuZGVybGluZTsKICAgIGNvbG9yOiAjYWZhZmFmOwp9CgoubmF2LWlubmVyIGgxIHsKICAgIGZvbnQtc2l6ZTogMS40cmVtOwogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKfQoubmF2LWlubmVyIGgyIHsKICAgIG1hcmdpbi10b3A6IDIwcHg7CiAgICBmb250LXNpemU6IDEuMnJlbTsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KLm5hdi1pbm5lciBoMyB7CiAgICBtYXJnaW4tdG9wOiAyMHB4OwogICAgZm9udC1zaXplOiAxcmVtOwogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKICAgIGJvcmRlci1ib3R0b206IDFweCBzb2xpZCByZ2JhKDI1NSwgMjU1LCAyNTUsIC4xNSk7CiAgICBwYWRkaW5nLWJvdHRvbTogMnB4Owp9Ci5uYXYtaW5uZXIgaDQgewogICAgdGV4dC10cmFuc2Zvcm06IHVwcGVyY2FzZTsKICAgIGZvbnQtc2l6ZTogMC45ZW07CiAgICBmb250LXdlaWdodDogYm9sZDsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KLm5hdi1pbm5lciBoNSB7CiAgICBmb250LXdlaWdodDogbm9ybWFsOwogICAgZm9udC1zaXplOiAwLjllbTsKICAgIHBhZGRpbmctbGVmdDogMTBweDsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KLm5hdi1pbm5lciBoNiB7CiAgICBmb250LXdlaWdodDogYm9sZCAhaW1wb3J0YW50Owp9CgoKCiNwYWdlLXRvYyB7CiAgICBiYWNrZ3JvdW5kOiAjMmY5OWYxOwogICAgbWFyZ2luLWxlZnQ6IC0ycmVtOwogICAgbWFyZ2luLXJpZ2h0OiAtMS41cmVtOwogICAgcGFkZGluZzogLjVyZW0gMXJlbSAuNXJlbSAwOwogICAgbWFyZ2luLWJvdHRvbTogMXJlbTsKICAgIHRleHQtYWxpZ246IHJpZ2h0OwogICAgbWFyZ2luLXRvcDogLjhyZW07Cn0KI3BhZ2UtdG9jIGEgewogICAgY29sb3I6ICNhN2Q3ZmY7CiAgICBsaW5lLWhlaWdodDogMTZweDsKICAgIGRpc3BsYXk6IGJsb2NrOwogICAgcGFkZGluZzogNHB4IDA7Cn0KI3BhZ2UtdG9jIC50b2MtYWN0aXZlIGEsICNwYWdlLXRvYyBhOmhvdmVyIHsKICAgIGNvbG9yOiAjZmZmCn0KI3BhZ2UtdG9jIC50b2MtaDIgewogICAgcGFkZGluZy1sZWZ0OiAxMHB4Owp9CiNwYWdlLXRvYyAudG9jLWgzIHsKICAgIHBhZGRpbmctbGVmdDogMjBweDsKfQoKQG1lZGlhIChtYXgtd2lkdGg6IDQ4MHB4KSB7CiAgICAubmF2IHsKICAgICAgICBwYWRkaW5nOiAyMHB4OwogICAgICAgIGJvcmRlci1ib3R0b206IHNvbGlkIDFweCAjZGZlMmU3OwogICAgfQp9CkBtZWRpYSAobWF4LXdpZHRoOiA3NjhweCkgewogICAgLm5hdiB7CiAgICAgICAgZGlzcGxheTogbm9uZTsKICAgIH0KfQpAbWVkaWEgKG1pbi13aWR0aDogNzY4cHgpIHsKICAgIC5jb250YWluZXIgewogICAgICAgIHBhZGRpbmctbGVmdDogMjcwcHg7CiAgICB9CiAgICAubmF2IHsKICAgICAgICBsZWZ0OiAwOwogICAgICAgIHRvcDogNDBweDsKICAgICAgICBib3R0b206IDA7CiAgICAgICAgd2lkdGg6IDI2MHB4OwogICAgICAgIHBvc2l0aW9uOiBmaXhlZDsKICAgICAgICBvdmVyZmxvdy15OiBhdXRvOwogICAgICAgIGJhY2tncm91bmQ6ICMwMDA7CiAgICB9CiAgICA6Oi13ZWJraXQtc2Nyb2xsYmFyIHsKICAgICAgICB3aWR0aDogOHB4OwogICAgICAgIGhlaWdodDogOHB4OwogICAgICAgIGN1cnNvcjogcG9pbnRlcjsKICAgIH0KICAgIDo6LXdlYmtpdC1zY3JvbGxiYXItdGh1bWIgewogICAgICAgIGJhY2tncm91bmQ6IHJnYmEoMjU1LCAyNTUsIDI1NSwgLjE1KTsKICAgICAgICAtd2Via2l0LWJvcmRlci1yYWRpdXM6IDhweDsKICAgICAgICBib3JkZXItcmFkaXVzOiA4cHg7CiAgICB9Cn0KCgoKLyogLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQogKiBDb250ZW50IHN0eWxpbmcKICovCi5jb250ZW50IHAsCi5jb250ZW50IHVsLAouY29udGVudCBvbCwKLmNvbnRlbnQgaDEsCi5jb250ZW50IGgyLAouY29udGVudCBoMywKLmNvbnRlbnQgaDQsCi5jb250ZW50IGg1LAouY29udGVudCBoNiwKLmNvbnRlbnQgcHJlOm5vdChbY2xhc3MqPSJsYW5ndWFnZS0iXSksCi5jb250ZW50IGJsb2NrcXVvdGUgewogICAgcGFkZGluZzogMTBweCAwOwogICAgYm94LXNpemluZzogYm9yZGVyLWJveDsKfQoKcHJlLkNvZGVNaXJyb3ItbGluZSB7CiAgICBwYWRkaW5nOiAwICFpbXBvcnRhbnQ7Cn0KCi5jb250ZW50IHByZSB7CiAgICBmb250LWZhbWlseTogTWVubG8sIG1vbm9zcGFjZTsKICAgIG1hcmdpbi1ib3R0b206IDFlbTsKfQouY29udGVudCBvbCA+IGxpIHsKICAgIGxpc3Qtc3R5bGUtdHlwZTogZGVjaW1hbDsKfQouY29udGVudCB1bCwKLmNvbnRlbnQgb2wgewogICAgbWFyZ2luLWxlZnQ6IDIwcHg7Cn0KLmNvbnRlbnQgdWwgPiBsaSB7CiAgICBwb3NpdGlvbjogcmVsYXRpdmU7CiAgICBsaXN0LXN0eWxlLXR5cGU6IGRpc2M7Cn0KLmNvbnRlbnQgbGkgPiA6Zmlyc3QtY2hpbGQgewogICAgcGFkZGluZy10b3A6IDA7Cn0KLmNvbnRlbnQgc3Ryb25nLAouY29udGVudCBiIHsKICAgIGZvbnQtd2VpZ2h0OiBib2xkOwp9Ci5jb250ZW50IGksCi5jb250ZW50IGVtIHsKICAgIGZvbnQtc3R5bGU6IGl0YWxpYzsKfQouY29udGVudCBjb2RlIHsKICAgIGZvbnQtZmFtaWx5OiBNZW5sbywgbW9ub3NwYWNlOwogICAgcGFkZGluZzogMXB4IDNweDsKICAgIGZvbnQtc2l6ZTogMC45NWVtOwogICAgY29sb3I6ICNmZDViOTU7Cn0KLmNvbnRlbnQgcHJlIHsKICAgIG1heC1oZWlnaHQ6IDMwcmVtOwp9Ci5jb250ZW50IHByZSA+IGNvZGUgewogICAgZGlzcGxheTogYmxvY2s7CiAgICBiYWNrZ3JvdW5kOiB0cmFuc3BhcmVudDsKICAgIGZvbnQtc2l6ZTogMWVtOwogICAgbGV0dGVyLXNwYWNpbmc6IC0xcHg7Cn0KLyouY29udGVudCBibG9ja3F1b3RlIDpmaXJzdC1jaGlsZCB7Ki8KLypwYWRkaW5nLXRvcDogMDsqLwovKn0qLwovKi5jb250ZW50IGJsb2NrcXVvdGUgOmxhc3QtY2hpbGQgeyovCi8qcGFkZGluZy1ib3R0b206IDA7Ki8KLyp9Ki8KLmNvbnRlbnQgdGFibGUgewogICAgbWFyZ2luLXRvcDogMTBweDsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7CiAgICBwYWRkaW5nOiAwOwogICAgYm9yZGVyLWNvbGxhcHNlOiBjb2xsYXBzZTsKICAgIGNsZWFyOiBib3RoOwp9Ci5jb250ZW50IHRhYmxlIHRyIHsKICAgIGJvcmRlci10b3A6IDFweCBzb2xpZCAjY2NjOwogICAgYmFja2dyb3VuZC1jb2xvcjogI2ZmZjsKICAgIG1hcmdpbjogMDsKICAgIHBhZGRpbmc6IDA7Cn0KLmNvbnRlbnQgdGFibGUgdHIgOm50aC1jaGlsZCgybikgewogICAgYmFja2dyb3VuZC1jb2xvcjogI2Y4ZjhmODsKfQouY29udGVudCB0YWJsZSB0ciB0aCB7CiAgICB0ZXh0LWFsaWduOiBhdXRvOwogICAgZm9udC13ZWlnaHQ6IGJvbGQ7CiAgICBib3JkZXI6IDFweCBzb2xpZCAjY2NjOwogICAgbWFyZ2luOiAwOwogICAgcGFkZGluZzogNnB4IDEzcHg7Cn0KLmNvbnRlbnQgdGFibGUgdHIgdGQgewogICAgdGV4dC1hbGlnbjogYXV0bzsKICAgIGJvcmRlcjogMXB4IHNvbGlkICNjY2M7CiAgICBtYXJnaW46IDA7CiAgICBwYWRkaW5nOiA2cHggMTNweDsKfQouY29udGVudCB0YWJsZSB0ciB0aCA6Zmlyc3QtY2hpbGQsCi5jb250ZW50IHRhYmxlIHRyIHRkIDpmaXJzdC1jaGlsZCB7CiAgICBtYXJnaW4tdG9wOiAwOwp9Ci5jb250ZW50IHRhYmxlIHRyIHRoIDpsYXN0LWNoaWxkLAouY29udGVudCB0YWJsZSB0ciB0ZCA6bGFzdC1jaGlsZCB7CiAgICBtYXJnaW4tYm90dG9tOiAwOwp9Ci8qIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KICogQ29udGVudAogKi8KLmNvbnRlbnQtcm9vdCB7CiAgICBtaW4taGVpZ2h0OiA5MCU7CiAgICBwb3NpdGlvbjogcmVsYXRpdmU7Cn0KLmNvbnRlbnQgewogICAgcGFkZGluZy10b3A6IDMwcHg7CiAgICBwYWRkaW5nLWJvdHRvbTogNDBweDsKICAgIHBhZGRpbmctbGVmdDogNDBweDsKICAgIHBhZGRpbmctcmlnaHQ6IDQwcHg7CiAgICB6b29tOiAxOwogICAgbWF4LXdpZHRoOiA4MDBweDsKfQouZWRpdC1tb2RlIC5jb250ZW50IHsKICAgIG1heC13aWR0aDogMTAwJTsKfQoucGFnZS1hY3Rpb25zIHsKICAgIG1hcmdpbi1ib3R0b206IDIwcHg7Cn0KLkNvZGVNaXJyb3IgewogICAgaGVpZ2h0OiBhdXRvICFpbXBvcnRhbnQ7CiAgICBwYWRkaW5nOiAyMHB4Owp9Ci5jb250ZW50OmJlZm9yZSwKLmNvbnRlbnQ6YWZ0ZXIgewogICAgY29udGVudDogIiI7CiAgICBkaXNwbGF5OiB0YWJsZTsKfQouY29udGVudDphZnRlciB7CiAgICBjbGVhcjogYm90aDsKfQouY29udGVudCBibG9ja3F1b3RlIHsKICAgIGNvbG9yOiAjZmZmZmZmOwogICAgdGV4dC1zaGFkb3c6IDAgMXB4IDAgcmdiYSgyNTUsMjU1LDI1NSwwLjUpOwogICAgYmFja2dyb3VuZDogI2UwNjI2MjsKICAgIHBhZGRpbmctbGVmdDogMXJlbTsKfQoKLmNvbnRlbnQgaDEgewogICAgZm9udC13ZWlnaHQ6IDMwMDsKICAgIGZvbnQtc2l6ZTogM3JlbTsKICAgIGxldHRlci1zcGFjaW5nOiAxcHg7Cn0KCi5jb250ZW50IGgyIHsKICAgIGZvbnQtc2l6ZTogMnJlbTsKICAgIGZvbnQtd2VpZ2h0OiAzMDA7CiAgICBjb2xvcjogI2U4ZThlODsKfQouY29udGVudCBoMyB7CiAgICBmb250LXNpemU6IDEuNXJlbTsKICAgIGZvbnQtd2VpZ2h0OiAzMDA7CiAgICBjb2xvcjogI2U4ZThlODsKfQoKLmNvbnRlbnQgaDQgewogICAgZm9udC1zaXplOiAxLjJyZW07CiAgICBmb250LXdlaWdodDogNDAwOwp9CgpAbWVkaWEgKG1heC13aWR0aDogNzY4cHgpIHsKICAgIC5jb250ZW50IGg0LAogICAgLmNvbnRlbnQgaDUsCiAgICAuY29udGVudCAuc21hbGwtaGVhZGluZyB7CiAgICAgICAgcGFkZGluZy10b3A6IDIwcHg7CiAgICB9Cn0KQG1lZGlhIChtYXgtd2lkdGg6IDQ4MHB4KSB7CiAgICAuY29udGVudCB7CiAgICAgICAgcGFkZGluZzogMjBweDsKICAgICAgICBwYWRkaW5nLXRvcDogNDBweDsKICAgIH0KICAgIC5jb250ZW50IGg0LAogICAgLmNvbnRlbnQgaDUsCiAgICAuY29udGVudCAuc21hbGwtaGVhZGluZyB7CiAgICAgICAgcGFkZGluZy10b3A6IDEwcHg7CiAgICB9Cn0KCi5jb250YWluZXIsIC5jb250ZW50LCAuY29udGVudC1pbm5lciB7CiAgICBtaW4taGVpZ2h0OiAxMDAlOwp9CgovKiBTaW1wbGVNREUgdG9vbGJhciAqLwouZWRpdG9yLXRvb2xiYXIgewogICAgYmFja2dyb3VuZDogI2ZmZjsKICAgIG9wYWNpdHk6IDEgIWltcG9ydGFudDsKfQouZWRpdG9yLXByZXZpZXctc2lkZSB7CiAgICBiYWNrZ3JvdW5kOiAjMWQyMDIxICFpbXBvcnRhbnQ7Cn0KLmNtLXRhYiB7CiAgICB3aWR0aDogMjBweDsKfQovKi5Db2RlTWlycm9yLmxhbmctbWFya2Rvd24gLmNtLWhlYWRlci0xIHsqLwogICAgLypmb250LXNpemU6IDJyZW07Ki8KLyp9Ki8KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1oZWFkZXItMiB7Ki8KICAgIC8qZm9udC1zaXplOiAxLjZyZW07Ki8KLyp9Ki8KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1oZWFkZXItMyB7Ki8KICAgIC8qZm9udC1zaXplOiAxLjJyZW07Ki8KLyp9Ki8KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1oZWFkZXItNCB7Ki8KICAgIC8qZm9udC1zaXplOiAxcmVtOyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20taGVhZGVyLTUgeyovCiAgICAvKmZvbnQtc2l6ZTogLjhyZW07Ki8KLyp9Ki8KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1oZWFkZXItNiB7Ki8KICAgIC8qISpmb250LXNpemU6IDFyZW07KiEqLwovKn0qLwovKi5Db2RlTWlycm9yLmxhbmctbWFya2Rvd24gLmNtLWNvbW1lbnQgeyovCiAgICAvKmZvbnQtZmFtaWx5OiAiQ291cmllciBuZXciOyovCiAgICAvKmNvbG9yOiBncmF5OyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20tdXJsIHsqLwogICAgLypjb2xvcjogIzAzYTlmNDsqLwovKn0qLwovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KRk9PVEVSCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwouZm9vdGVyIHsKICAgIHBhZGRpbmc6IDIwcHg7CiAgICB0ZXh0LWFsaWduOiByaWdodDsKfQouZm9vdGVyIC50aGVtZXMgewogICAgZGlzcGxheTogaW5saW5lLWJsb2NrOwp9Ci5mb290ZXIgLmNvcHlyaWdodHMgewogICAgZGlzcGxheTogaW5saW5lLWJsb2NrOwogICAgY29sb3I6IGdyYXk7CiAgICBmb250LXNpemU6IDExcHg7Cn0KCi8qIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpMT0dJTiBQQUdFCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwoubG9naW4tcGFnZSB7CiAgICBiYWNrZ3JvdW5kOiAjMzMzMzJGOwp9CgoubG9naW4tcGFnZSBmb3JtIHsKICAgIHBvc2l0aW9uOiBhYnNvbHV0ZTsKICAgIHRvcDogNTAlOwogICAgbGVmdDogNTAlOwogICAgd2lkdGg6IDI2MHB4OwogICAgbWluLWhlaWdodDogMjAwcHg7CiAgICBtYXJnaW46IC0xNTBweCAwIDAgLTE1MHB4OwogICAgdGV4dC1hbGlnbjogY2VudGVyOwogICAgLypiYWNrZ3JvdW5kOiAjZWY4ZDMxOyovCiAgICBiYWNrZ3JvdW5kOiByZ2IoMTc3LCAxOTksIDU3KTsKICAgIGJvcmRlci1ib3R0b206IDhweCBzb2xpZCAjMjcyNzI3OwogICAgcGFkZGluZzogMjBweDsKfQoKLmxvZ2luLXBhZ2UgLmZvcm0tZ3JvdXAgewogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKfQoKLmxvZ2luLXBhZ2UgLmZvcm0tZ3JvdXAuY2hlY2tib3ggewogICAgdGV4dC1hbGlnbjogbGVmdDsKfQoKLmxvZ2luLXBhZ2UgaW5wdXRbdHlwZT10ZXh0XSwgLmxvZ2luLXBhZ2UgaW5wdXRbdHlwZT1wYXNzd29yZF0gewogICAgYm9yZGVyOiAwOwogICAgd2lkdGg6IDEwMCU7CiAgICBwYWRkaW5nOiAxMHB4IDE1cHg7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94Owp9CgoubG9naW4tcGFnZSBidXR0b24gewogICAgd2lkdGg6IDEwMCU7CiAgICBib3JkZXI6IDA7CiAgICBiYWNrZ3JvdW5kOiAjMzUzNTM1OwogICAgY29sb3I6ICNmZmY7CiAgICBwYWRkaW5nOiAxMHB4Owp9CgouY29udGVudCAuY29kZS1hY3Rpb24tZG93bmxvYWQgewogICAgYmFja2dyb3VuZDogcmdiKDI5LCAzMiwgMzMpOwogICAgdG9wOiAtOHB4OwogICAgcG9zaXRpb246IHJlbGF0aXZlOwogICAgY29sb3I6ICNGRkMxMDc7CiAgICB0ZXh0LXRyYW5zZm9ybTogdXBwZXJjYXNlOwogICAgZm9udC1zaXplOiAxMHB4OwogICAgaGVpZ2h0OiAyNXB4OwogICAgZGlzcGxheTogaW5saW5lLWJsb2NrOwogICAgcGFkZGluZzogNnB4IDZweDsKfQouY29kZS1hY3Rpb24tZG93bmxvYWQ6aG92ZXIgewogICAgLypiYWNrZ3JvdW5kOiByZ2JhKDI1NSwgMjU1LCAyNTUsIDAuNSk7Ki8KICAgIGNvbG9yOiAjZmZmOwp9CgovKioKICogb2thaWRpYSB0aGVtZSBmb3IgSmF2YVNjcmlwdCwgQ1NTIGFuZCBIVE1MCiAqIExvb3NlbHkgYmFzZWQgb24gTW9ub2thaSB0ZXh0bWF0ZSB0aGVtZSBieSBodHRwOi8vd3d3Lm1vbm9rYWkubmwvCiAqIEBhdXRob3Igb2NvZGlhCiAqLwoKY29kZVtjbGFzcyo9Imxhbmd1YWdlLSJdLApwcmVbY2xhc3MqPSJsYW5ndWFnZS0iXSB7CiAgICBjb2xvcjogI2Y4ZjhmMjsKICAgIGJhY2tncm91bmQ6IG5vbmU7CiAgICB0ZXh0LXNoYWRvdzogMCAxcHggcmdiYSgwLCAwLCAwLCAwLjMpOwogICAgZm9udC1mYW1pbHk6IENvbnNvbGFzLCBNb25hY28sICdBbmRhbGUgTW9ubycsICdVYnVudHUgTW9ubycsIG1vbm9zcGFjZTsKICAgIHRleHQtYWxpZ246IGxlZnQ7CiAgICB3aGl0ZS1zcGFjZTogcHJlOwogICAgd29yZC1zcGFjaW5nOiBub3JtYWw7CiAgICB3b3JkLWJyZWFrOiBub3JtYWw7CiAgICB3b3JkLXdyYXA6IG5vcm1hbDsKICAgIGxpbmUtaGVpZ2h0OiAxLjU7CgogICAgLW1vei10YWItc2l6ZTogNDsKICAgIC1vLXRhYi1zaXplOiA0OwogICAgdGFiLXNpemU6IDQ7CgogICAgLXdlYmtpdC1oeXBoZW5zOiBub25lOwogICAgLW1vei1oeXBoZW5zOiBub25lOwogICAgLW1zLWh5cGhlbnM6IG5vbmU7CiAgICBoeXBoZW5zOiBub25lOwp9Cgpjb2RlW2NsYXNzKj0ibGFuZ3VhZ2UtIl0gewogICAgcGFkZGluZzogMXJlbTsKfQoKLyogQ29kZSBibG9ja3MgKi8KcHJlW2NsYXNzKj0ibGFuZ3VhZ2UtIl0gewogICAgcGFkZGluZzogMWVtOwogICAgbWFyZ2luOiAuNWVtIDA7CiAgICBvdmVyZmxvdzogYXV0bzsKICAgIGJvcmRlci1yYWRpdXM6IDAuM2VtOwp9Cgo6bm90KHByZSkgPiBjb2RlW2NsYXNzKj0ibGFuZ3VhZ2UtIl0sCnByZVtjbGFzcyo9Imxhbmd1YWdlLSJdIHsKICAgIGJhY2tncm91bmQ6ICMyNzI4MjI7Cn0KCi8qIElubGluZSBjb2RlICovCjpub3QocHJlKSA+IGNvZGVbY2xhc3MqPSJsYW5ndWFnZS0iXSB7CiAgICBwYWRkaW5nOiAuMWVtOwogICAgYm9yZGVyLXJhZGl1czogLjNlbTsKICAgIHdoaXRlLXNwYWNlOiBub3JtYWw7Cn0KCi50b2tlbi5jb21tZW50LAoudG9rZW4ucHJvbG9nLAoudG9rZW4uZG9jdHlwZSwKLnRva2VuLmNkYXRhIHsKICAgIGNvbG9yOiBzbGF0ZWdyYXk7CiAgICBmb250LWZhbWlseTogJ0NvdXNpbmUnLCBtb25vc3BhY2U7Cn0KCi50b2tlbi5jb21tZW50IHsKICAgIGZvbnQtc2l6ZTogMTRweDsKfQoKLnRva2VuLnB1bmN0dWF0aW9uIHsKICAgIGNvbG9yOiAjZjhmOGYyOwp9CgoubmFtZXNwYWNlIHsKICAgIG9wYWNpdHk6IC43Owp9CgoudG9rZW4ucHJvcGVydHksCi50b2tlbi50YWcsCi50b2tlbi5jb25zdGFudCwKLnRva2VuLnN5bWJvbCwKLnRva2VuLmRlbGV0ZWQgewogICAgY29sb3I6ICNmOTI2NzI7Cn0KCi50b2tlbi5ib29sZWFuLAoudG9rZW4ubnVtYmVyIHsKICAgIGNvbG9yOiAjYWU4MWZmOwp9CgoudG9rZW4uc2VsZWN0b3IsCi50b2tlbi5hdHRyLW5hbWUsCi50b2tlbi5zdHJpbmcsCi50b2tlbi5jaGFyLAoudG9rZW4uYnVpbHRpbiwKLnRva2VuLmluc2VydGVkIHsKICAgIGNvbG9yOiAjYTZlMjJlOwp9CgoudG9rZW4ub3BlcmF0b3IsCi50b2tlbi5lbnRpdHksCi50b2tlbi51cmwsCi5sYW5ndWFnZS1jc3MgLnRva2VuLnN0cmluZywKLnN0eWxlIC50b2tlbi5zdHJpbmcsCi50b2tlbi52YXJpYWJsZSB7CiAgICBjb2xvcjogI2Y4ZjhmMjsKfQoKLnRva2VuLmF0cnVsZSwKLnRva2VuLmF0dHItdmFsdWUsCi50b2tlbi5mdW5jdGlvbiB7CiAgICBjb2xvcjogI2U2ZGI3NDsKfQoKLnRva2VuLmtleXdvcmQgewogICAgY29sb3I6ICM2NmQ5ZWY7Cn0KCi50b2tlbi5yZWdleCwKLnRva2VuLmltcG9ydGFudCB7CiAgICBjb2xvcjogI2ZkOTcxZjsKfQoKLnRva2VuLmltcG9ydGFudCwKLnRva2VuLmJvbGQgewogICAgZm9udC13ZWlnaHQ6IGJvbGQ7Cn0KLnRva2VuLml0YWxpYyB7CiAgICBmb250LXN0eWxlOiBpdGFsaWM7Cn0KCi50b2tlbi5lbnRpdHkgewogICAgY3Vyc29yOiBoZWxwOwp9');
+    return base64_decode('QGltcG9ydCB1cmwoJ2h0dHBzOi8vZm9udHMuZ29vZ2xlYXBpcy5jb20vY3NzP2ZhbWlseT1MYXRvOjMwMCw0MDAsNDAwaSw3MDAsOTAwJnN1YnNldD1sYXRpbi1leHQnKTsKLyogVXNlZCBieSBwcmlzbWpzICovCkBpbXBvcnQgdXJsKCdodHRwczovL2ZvbnRzLmdvb2dsZWFwaXMuY29tL2Nzcz9mYW1pbHk9Q291c2luZSZzdWJzZXQ9bGF0aW4tZXh0Jyk7CgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KREVGQVVMVFMKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovCmh0bWwsYm9keSxkaXYsc3BhbixhcHBsZXQsb2JqZWN0LGlmcmFtZSxoMSxoMixoMyxoNCxoNSxoNixwLGJsb2NrcXVvdGUscHJlLGEsYWJiciwKYWNyb255bSxhZGRyZXNzLGJpZyxjaXRlLGNvZGUsZGVsLGRmbixlbSxpbWcsaW5zLGtiZCxxLHMsc2FtcCxzbWFsbCxzdHJpa2Usc3Ryb25nLApzdWIsc3VwLHR0LHZhcixkbCxkdCxkZCxvbCx1bCxsaSxmaWVsZHNldCxmb3JtLGxhYmVsLGxlZ2VuZCx0YWJsZSxjYXB0aW9uLHRib2R5LAp0Zm9vdCx0aGVhZCx0cix0aCx0ZCB7CiAgICBtYXJnaW46IDA7CiAgICBwYWRkaW5nOiAwOwogICAgYm9yZGVyOiAwOwogICAgb3V0bGluZTogMDsKICAgIGZvbnQtd2VpZ2h0OiBpbmhlcml0OwogICAgZm9udC1zdHlsZTogaW5oZXJpdDsKICAgIGZvbnQtZmFtaWx5OiAnTGF0bycsIHNhbnMtc2VyaWY7CiAgICBmb250LXNpemU6IDEwMCU7CiAgICB2ZXJ0aWNhbC1hbGlnbjogYmFzZWxpbmU7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94Owp9Cmh0bWwgewogICAgb3ZlcmZsb3cteDogaGlkZGVuOwogICAgaGVpZ2h0OiAxMDAlOwp9CmJvZHkgewogICAgbGluZS1oZWlnaHQ6IDE7CiAgICBjb2xvcjogIzAwMDsKICAgIGJhY2tncm91bmQ6ICMxZDIwMjE7CiAgICBoZWlnaHQ6IDEwMCU7CiAgICBtYXJnaW4tdG9wOiAzMHB4Owp9Cm9sLCB1bCB7CiAgICBsaXN0LXN0eWxlOiBub25lOwp9CnRhYmxlIHsKICAgIGJvcmRlci1jb2xsYXBzZTogc2VwYXJhdGU7CiAgICBib3JkZXItc3BhY2luZzogMDsKICAgIHZlcnRpY2FsLWFsaWduOiBtaWRkbGU7Cn0KY2FwdGlvbiwgdGgsIHRkIHsKICAgIHRleHQtYWxpZ246IGxlZnQ7CiAgICBmb250LXdlaWdodDogbm9ybWFsOwogICAgdmVydGljYWwtYWxpZ246IG1pZGRsZTsKfQphIGltZyB7CiAgICBib3JkZXI6IG5vbmU7Cn0KaHIgewogICAgYm9yZGVyOiAwOwogICAgYm9yZGVyLWJvdHRvbTogMXB4IGRhc2hlZCAjM2YzZjNmOwp9Ci5idG4gewogICAgbWFyZ2luLXJpZ2h0OiA2cHg7CiAgICBjdXJzb3I6IHBvaW50ZXI7CiAgICB0ZXh0LXRyYW5zZm9ybTogdXBwZXJjYXNlOwogICAgZm9udC1zaXplOiAuN3JlbTsKICAgIGJvcmRlci1yYWRpdXM6IDRweDsKICAgIHBhZGRpbmc6IDZweCAxMnB4OwogICAgdGV4dC1zaGFkb3c6IDBweCAxcHggMXB4IHJnYmEoMTUwLCAxNTAsIDE1MCwgMSk7CiAgICBib3JkZXItYm90dG9tOiAxcHggc29saWQgcmdiYSgyNTUsIDI1NSwgMjU1LCAuNCk7CiAgICBjb2xvcjogI2ZmZiAhaW1wb3J0YW50OwogICAgdGV4dC1kZWNvcmF0aW9uOiBub25lICFpbXBvcnRhbnQ7Cn0KLmJ0bltkaXNhYmxlZF0gewogICAgYmFja2dyb3VuZDogZ3JheSAhaW1wb3J0YW50OwogICAgY3Vyc29yOiBkZWZhdWx0ICFpbXBvcnRhbnQ7Cn0KLmJ0bjpob3ZlciB7CiAgICBjb2xvcjogI2ZmZiAhaW1wb3J0YW50Owp9Ci5idG4taW5mbyB7CiAgICBiYWNrZ3JvdW5kOiAjMjE5NkYzOwp9Ci5idG4taW5mbzpob3ZlciB7CiAgICBiYWNrZ3JvdW5kOiAjMmFhY2ZmOwp9Ci5idG4tc3VjY2VzcyB7CiAgICBiYWNrZ3JvdW5kOiAjOEJDMzRBOwp9Ci5idG4tc3VjY2Vzczpob3ZlciB7CiAgICBiYWNrZ3JvdW5kOiAjYTVlNDUxOwp9Ci5idG4tZGFuZ2VyIHsKICAgIGJhY2tncm91bmQ6ICNkMTJiMzc7Cn0KLmJ0bi1kYW5nZXI6aG92ZXIgewogICAgYmFja2dyb3VuZDogI2ZiMzE0MTsKfQoKLyogLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCkZPTlRTIERFRkFVTFRTCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwpib2R5LAp0ZCwKdGV4dGFyZWEKewogICAgbGluZS1oZWlnaHQ6IDEuNjsKICAgIGZvbnQtc2l6ZTogMWVtOwogICAgY29sb3I6ICNmZmY7Cn0KYSB7CiAgICBjb2xvcjogI2ZmZjsKICAgIHRleHQtZGVjb3JhdGlvbjogbm9uZTsKfQphOmhvdmVyIHsKICAgIGNvbG9yOiAjODBjOWZmOwp9CmgxLCBoMiwgaDMsIGg0LCBoNSwgaDYgewogICAgZm9udC13ZWlnaHQ6IGJvbGQ7Cn0KCgoKCgoKLmNvbnRlbnQgLmJyZWFkY3J1bWIgewogICAgbWFyZ2luOiAwIC0xNXB4IDIwcHggLTE1cHggIWltcG9ydGFudDsKICAgIGZvbnQtc2l6ZTogLjllbTsKICAgIHBhZGRpbmc6IDNweCAxNXB4OwogICAgbGlzdC1zdHlsZTogbm9uZTsKfQouY29udGVudCBhIHsKICAgIGNvbG9yOiAjRkY1NzIyOwogICAgdGV4dC1kZWNvcmF0aW9uOiB1bmRlcmxpbmU7Cn0KLmJyZWFkY3J1bWIgLmFjdGl2ZSBhIHsKICAgIGNvbG9yOiAjODBjOWZmOwp9Ci5icmVhZGNydW1iPmxpIHsKICAgIGRpc3BsYXk6IGlubGluZS1ibG9jazsKfQouYnJlYWRjcnVtYj5saStsaTpiZWZvcmUgewogICAgY29udGVudDogIi9cMDBhMCI7CiAgICBwYWRkaW5nOiAwIDVweDsKICAgIGNvbG9yOiAjY2NjOwp9CgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KSEVBREVSCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwouaGVhZGVyIHsKICAgIHBhZGRpbmc6IDVweCAxMHB4OwogICAgY29sb3I6ICNmZmY7CiAgICBwb3NpdGlvbjogZml4ZWQ7CiAgICB0b3A6IDA7CiAgICBsZWZ0OiAwOwogICAgd2lkdGg6IDEwMCU7CiAgICB6LWluZGV4OiA5OTk5OwogICAgYmFja2dyb3VuZDogI2ZmZjsKICAgIGNsZWFyOiBib3RoOwp9CgouaGVhZGVyIGgyIHsKICAgIGZsb2F0OiBsZWZ0OwogICAgY29sb3I6ICMwMDA7Cn0KCi51c2VyLWFjdGlvbnMgewogICAgZmxvYXQ6IHJpZ2h0OwogICAgbWFyZ2luLXJpZ2h0OiAyMHB4Owp9CgoudXNlci1hY3Rpb25zIGEgewogICAgY29sb3I6ICMwMDA7Cn0KCi8qIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpOQVYKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovCi5uYXYgewogICAgZm9udC1zaXplOiAwLjllbTsKfQoubmF2LWlubmVyIHsKICAgIHBhZGRpbmc6IDJyZW07Cn0KLm5hdi1pbm5lciA+IHVsIHVsIHsKICAgIG1hcmdpbi1sZWZ0OiAxNXB4OwogICAgbWFyZ2luLXRvcDogNXB4OwogICAgbWFyZ2luLWJvdHRvbTogNXB4Owp9Ci5uYXYtaW5uZXIgYSB7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94OwogICAgcG9zaXRpb246IHJlbGF0aXZlOwogICAgZGlzcGxheTogYmxvY2s7CiAgICBwYWRkaW5nLXRvcDogMXB4OwogICAgcGFkZGluZy1ib3R0b206IDFweDsKICAgIGNvbG9yOiAjNzM3Yzg0Owp9Ci5uYXYtaW5uZXIgYTpob3ZlciB7CiAgICB0ZXh0LWRlY29yYXRpb246IHVuZGVybGluZTsKICAgIGNvbG9yOiAjYWZhZmFmOwp9CgoubmF2LWlubmVyIGgxIHsKICAgIGZvbnQtc2l6ZTogMS40cmVtOwogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKfQoubmF2LWlubmVyIGgyIHsKICAgIG1hcmdpbi10b3A6IDIwcHg7CiAgICBmb250LXNpemU6IDEuMnJlbTsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KLm5hdi1pbm5lciBoMyB7CiAgICBtYXJnaW4tdG9wOiAyMHB4OwogICAgZm9udC1zaXplOiAxcmVtOwogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKICAgIGJvcmRlci1ib3R0b206IDFweCBzb2xpZCByZ2JhKDI1NSwgMjU1LCAyNTUsIC4xNSk7CiAgICBwYWRkaW5nLWJvdHRvbTogMnB4Owp9Ci5uYXYtaW5uZXIgaDQgewogICAgbWFyZ2luLXRvcDogMjBweDsKICAgIHRleHQtdHJhbnNmb3JtOiB1cHBlcmNhc2U7CiAgICBmb250LXNpemU6IDAuOWVtOwogICAgZm9udC13ZWlnaHQ6IGJvbGQ7CiAgICBtYXJnaW4tYm90dG9tOiA0cHg7Cn0KLm5hdi1pbm5lciBoNSB7CiAgICBmb250LXdlaWdodDogbm9ybWFsOwogICAgZm9udC1zaXplOiAwLjllbTsKICAgIHBhZGRpbmctbGVmdDogMTBweDsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KLm5hdi1pbm5lciBoNiB7CiAgICBmb250LXdlaWdodDogYm9sZCAhaW1wb3J0YW50Owp9CgoKCiNwYWdlLXRvYyB7CiAgICBiYWNrZ3JvdW5kOiAjMmY5OWYxOwogICAgbWFyZ2luLWxlZnQ6IC0ycmVtOwogICAgbWFyZ2luLXJpZ2h0OiAtMS41cmVtOwogICAgcGFkZGluZzogLjVyZW0gMXJlbSAuNXJlbSAwOwogICAgbWFyZ2luLWJvdHRvbTogMXJlbTsKICAgIHRleHQtYWxpZ246IHJpZ2h0OwogICAgbWFyZ2luLXRvcDogLjhyZW07Cn0KI3BhZ2UtdG9jIGEgewogICAgY29sb3I6ICNhN2Q3ZmY7CiAgICBsaW5lLWhlaWdodDogMTZweDsKICAgIGRpc3BsYXk6IGJsb2NrOwogICAgcGFkZGluZzogNHB4IDA7Cn0KI3BhZ2UtdG9jIC50b2MtYWN0aXZlIGEsICNwYWdlLXRvYyBhOmhvdmVyIHsKICAgIGNvbG9yOiAjZmZmCn0KI3BhZ2UtdG9jIC50b2MtYWN0aXZlIHsKICAgIGJvcmRlci1jb2xvcjogI2ZmZiAhaW1wb3J0YW50Owp9CiNwYWdlLXRvYyAudG9jLWgyIHsKfQojcGFnZS10b2MgLnRvYy1oMyB7CiAgICBwYWRkaW5nLXJpZ2h0OiA0cHg7CiAgICBib3JkZXItcmlnaHQ6IDEwcHggc29saWQgcmdiYSgyNTUsMjU1LDI1NSwuMik7Cn0KI3BhZ2UtdG9jIC50b2MtaDQgewogICAgcGFkZGluZy1yaWdodDogNHB4OwogICAgYm9yZGVyLXJpZ2h0OiAyMHB4IHNvbGlkIHJnYmEoMjU1LDI1NSwyNTUsLjIpOwp9CgpAbWVkaWEgKG1heC13aWR0aDogNDgwcHgpIHsKICAgIC5uYXYgewogICAgICAgIHBhZGRpbmc6IDIwcHg7CiAgICAgICAgYm9yZGVyLWJvdHRvbTogc29saWQgMXB4ICNkZmUyZTc7CiAgICB9Cn0KQG1lZGlhIChtYXgtd2lkdGg6IDc2OHB4KSB7CiAgICAubmF2IHsKICAgICAgICBkaXNwbGF5OiBub25lOwogICAgfQp9CkBtZWRpYSAobWluLXdpZHRoOiA3NjhweCkgewogICAgLmNvbnRhaW5lciB7CiAgICAgICAgcGFkZGluZy1sZWZ0OiAyNzBweDsKICAgIH0KICAgIC5uYXYgewogICAgICAgIGxlZnQ6IDA7CiAgICAgICAgdG9wOiA0MHB4OwogICAgICAgIGJvdHRvbTogMDsKICAgICAgICB3aWR0aDogMjYwcHg7CiAgICAgICAgcG9zaXRpb246IGZpeGVkOwogICAgICAgIG92ZXJmbG93LXk6IGF1dG87CiAgICAgICAgYmFja2dyb3VuZDogIzAwMDsKICAgIH0KICAgIDo6LXdlYmtpdC1zY3JvbGxiYXIgewogICAgICAgIHdpZHRoOiA4cHg7CiAgICAgICAgaGVpZ2h0OiA4cHg7CiAgICAgICAgY3Vyc29yOiBwb2ludGVyOwogICAgfQogICAgOjotd2Via2l0LXNjcm9sbGJhci10aHVtYiB7CiAgICAgICAgYmFja2dyb3VuZDogcmdiYSgyNTUsIDI1NSwgMjU1LCAuMTUpOwogICAgICAgIC13ZWJraXQtYm9yZGVyLXJhZGl1czogOHB4OwogICAgICAgIGJvcmRlci1yYWRpdXM6IDhweDsKICAgIH0KfQoKCgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiAqIENvbnRlbnQgc3R5bGluZwogKi8KLmNvbnRlbnQgcCwKLmNvbnRlbnQgdWwsCi5jb250ZW50IG9sLAouY29udGVudCBoMSwKLmNvbnRlbnQgaDIsCi5jb250ZW50IGgzLAouY29udGVudCBoNCwKLmNvbnRlbnQgaDUsCi5jb250ZW50IGg2LAouY29udGVudCBwcmU6bm90KFtjbGFzcyo9Imxhbmd1YWdlLSJdKSwKLmNvbnRlbnQgYmxvY2txdW90ZSB7CiAgICBwYWRkaW5nOiAxMHB4IDA7CiAgICBib3gtc2l6aW5nOiBib3JkZXItYm94Owp9CgpwcmUuQ29kZU1pcnJvci1saW5lIHsKICAgIHBhZGRpbmc6IDAgIWltcG9ydGFudDsKfQoKLmNvbnRlbnQgcHJlIHsKICAgIGZvbnQtZmFtaWx5OiBNZW5sbywgbW9ub3NwYWNlOwogICAgbWFyZ2luLWJvdHRvbTogMWVtOwp9Ci5jb250ZW50IG9sID4gbGkgewogICAgbGlzdC1zdHlsZS10eXBlOiBkZWNpbWFsOwp9Ci5jb250ZW50IHVsLAouY29udGVudCBvbCB7CiAgICBtYXJnaW4tbGVmdDogMjBweDsKfQouY29udGVudCB1bCA+IGxpIHsKICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgIGxpc3Qtc3R5bGUtdHlwZTogZGlzYzsKfQouY29udGVudCBsaSA+IDpmaXJzdC1jaGlsZCB7CiAgICBwYWRkaW5nLXRvcDogMDsKfQouY29udGVudCBzdHJvbmcsCi5jb250ZW50IGIgewogICAgZm9udC13ZWlnaHQ6IGJvbGQ7Cn0KLmNvbnRlbnQgaSwKLmNvbnRlbnQgZW0gewogICAgZm9udC1zdHlsZTogaXRhbGljOwp9Ci5jb250ZW50IGNvZGUgewogICAgZm9udC1mYW1pbHk6IE1lbmxvLCBtb25vc3BhY2U7CiAgICBwYWRkaW5nOiAxcHggM3B4OwogICAgZm9udC1zaXplOiAwLjk1ZW07CiAgICBjb2xvcjogI2FkYWRhZDsKfQouY29udGVudCBwcmUgewogICAgbWF4LWhlaWdodDogMzByZW07Cn0KLmNvbnRlbnQgcHJlID4gY29kZSB7CiAgICBkaXNwbGF5OiBibG9jazsKICAgIGJhY2tncm91bmQ6IHRyYW5zcGFyZW50OwogICAgZm9udC1zaXplOiAxZW07CiAgICBsZXR0ZXItc3BhY2luZzogLTFweDsKfQovKi5jb250ZW50IGJsb2NrcXVvdGUgOmZpcnN0LWNoaWxkIHsqLwovKnBhZGRpbmctdG9wOiAwOyovCi8qfSovCi8qLmNvbnRlbnQgYmxvY2txdW90ZSA6bGFzdC1jaGlsZCB7Ki8KLypwYWRkaW5nLWJvdHRvbTogMDsqLwovKn0qLwouY29udGVudCB0YWJsZSB7CiAgICBtYXJnaW4tdG9wOiAxMHB4OwogICAgbWFyZ2luLWJvdHRvbTogMTBweDsKICAgIHBhZGRpbmc6IDA7CiAgICBib3JkZXItY29sbGFwc2U6IGNvbGxhcHNlOwogICAgY2xlYXI6IGJvdGg7Cn0KLmNvbnRlbnQgdGFibGUgdHIgewogICAgbWFyZ2luOiAwOwogICAgcGFkZGluZzogMDsKfQouY29udGVudCB0YWJsZSB0ciA6bnRoLWNoaWxkKDJuKSB7Cn0KLmNvbnRlbnQgdGFibGUgdHIgdGggewogICAgdGV4dC1hbGlnbjogYXV0bzsKICAgIGZvbnQtd2VpZ2h0OiBib2xkOwogICAgYm9yZGVyOiAxcHggc29saWQgIzcxNzE3MTsKICAgIG1hcmdpbjogMDsKICAgIHBhZGRpbmc6IDZweCAxM3B4Owp9Ci5jb250ZW50IHRhYmxlIHRyIHRkIHsKICAgIHRleHQtYWxpZ246IGF1dG87CiAgICBib3JkZXI6IDFweCBzb2xpZCAjNzE3MTcxOwogICAgbWFyZ2luOiAwOwogICAgcGFkZGluZzogNnB4IDEzcHg7Cn0KLmNvbnRlbnQgdGFibGUgdHIgdGggOmZpcnN0LWNoaWxkLAouY29udGVudCB0YWJsZSB0ciB0ZCA6Zmlyc3QtY2hpbGQgewogICAgbWFyZ2luLXRvcDogMDsKfQouY29udGVudCB0YWJsZSB0ciB0aCA6bGFzdC1jaGlsZCwKLmNvbnRlbnQgdGFibGUgdHIgdGQgOmxhc3QtY2hpbGQgewogICAgbWFyZ2luLWJvdHRvbTogMDsKfQovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiAqIENvbnRlbnQKICovCi5jb250ZW50LXJvb3QgewogICAgbWluLWhlaWdodDogOTAlOwogICAgcG9zaXRpb246IHJlbGF0aXZlOwp9Ci5jb250ZW50IHsKICAgIHBhZGRpbmctdG9wOiAzMHB4OwogICAgcGFkZGluZy1ib3R0b206IDQwcHg7CiAgICBwYWRkaW5nLWxlZnQ6IDQwcHg7CiAgICBwYWRkaW5nLXJpZ2h0OiA0MHB4OwogICAgem9vbTogMTsKICAgIG1heC13aWR0aDogODAwcHg7Cn0KLmVkaXQtbW9kZSAuY29udGVudCB7CiAgICBtYXgtd2lkdGg6IDEwMCU7Cn0KLnBhZ2UtYWN0aW9ucyB7CiAgICBtYXJnaW4tYm90dG9tOiAyMHB4Owp9Ci5Db2RlTWlycm9yIHsKICAgIGhlaWdodDogYXV0byAhaW1wb3J0YW50OwogICAgcGFkZGluZzogMjBweDsKfQouY29udGVudDpiZWZvcmUsCi5jb250ZW50OmFmdGVyIHsKICAgIGNvbnRlbnQ6ICIiOwogICAgZGlzcGxheTogdGFibGU7Cn0KLmNvbnRlbnQ6YWZ0ZXIgewogICAgY2xlYXI6IGJvdGg7Cn0KLmNvbnRlbnQgYmxvY2txdW90ZSB7CiAgICBjb2xvcjogI2ZmZmZmZjsKICAgIHRleHQtc2hhZG93OiAwIDFweCAwIHJnYmEoMjU1LDI1NSwyNTUsMC41KTsKICAgIGJhY2tncm91bmQ6ICNlMDYyNjI7CiAgICBwYWRkaW5nLWxlZnQ6IDFyZW07Cn0KCi5jb250ZW50IGgxIHsKICAgIGZvbnQtd2VpZ2h0OiAzMDA7CiAgICBmb250LXNpemU6IDNyZW07CiAgICBsZXR0ZXItc3BhY2luZzogMXB4Owp9CgouY29udGVudCBoMiB7CiAgICBmb250LXNpemU6IDJyZW07CiAgICBmb250LXdlaWdodDogMzAwOwogICAgY29sb3I6ICNlOGU4ZTg7Cn0KLmNvbnRlbnQgaDMgewogICAgZm9udC1zaXplOiAxLjVyZW07CiAgICBmb250LXdlaWdodDogMzAwOwogICAgY29sb3I6ICNlOGU4ZTg7Cn0KCi5jb250ZW50IGg0IHsKICAgIGZvbnQtc2l6ZTogMS4ycmVtOwogICAgZm9udC13ZWlnaHQ6IDQwMDsKfQoKQG1lZGlhIChtYXgtd2lkdGg6IDc2OHB4KSB7CiAgICAuY29udGVudCBoNCwKICAgIC5jb250ZW50IGg1LAogICAgLmNvbnRlbnQgLnNtYWxsLWhlYWRpbmcgewogICAgICAgIHBhZGRpbmctdG9wOiAyMHB4OwogICAgfQp9CkBtZWRpYSAobWF4LXdpZHRoOiA0ODBweCkgewogICAgLmNvbnRlbnQgewogICAgICAgIHBhZGRpbmc6IDIwcHg7CiAgICAgICAgcGFkZGluZy10b3A6IDQwcHg7CiAgICB9CiAgICAuY29udGVudCBoNCwKICAgIC5jb250ZW50IGg1LAogICAgLmNvbnRlbnQgLnNtYWxsLWhlYWRpbmcgewogICAgICAgIHBhZGRpbmctdG9wOiAxMHB4OwogICAgfQp9CgouY29udGFpbmVyLCAuY29udGVudCwgLmNvbnRlbnQtaW5uZXIgewogICAgbWluLWhlaWdodDogMTAwJTsKfQoKLyogU2ltcGxlTURFIHRvb2xiYXIgKi8KLmVkaXRvci10b29sYmFyIHsKICAgIGJhY2tncm91bmQ6ICNmZmY7CiAgICBvcGFjaXR5OiAxICFpbXBvcnRhbnQ7Cn0KLmVkaXRvci1wcmV2aWV3LXNpZGUgewogICAgYmFja2dyb3VuZDogIzFkMjAyMSAhaW1wb3J0YW50Owp9Ci5jbS10YWIgewogICAgd2lkdGg6IDIwcHg7Cn0KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1oZWFkZXItMSB7Ki8KICAgIC8qZm9udC1zaXplOiAycmVtOyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20taGVhZGVyLTIgeyovCiAgICAvKmZvbnQtc2l6ZTogMS42cmVtOyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20taGVhZGVyLTMgeyovCiAgICAvKmZvbnQtc2l6ZTogMS4ycmVtOyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20taGVhZGVyLTQgeyovCiAgICAvKmZvbnQtc2l6ZTogMXJlbTsqLwovKn0qLwovKi5Db2RlTWlycm9yLmxhbmctbWFya2Rvd24gLmNtLWhlYWRlci01IHsqLwogICAgLypmb250LXNpemU6IC44cmVtOyovCi8qfSovCi8qLkNvZGVNaXJyb3IubGFuZy1tYXJrZG93biAuY20taGVhZGVyLTYgeyovCiAgICAvKiEqZm9udC1zaXplOiAxcmVtOyohKi8KLyp9Ki8KLyouQ29kZU1pcnJvci5sYW5nLW1hcmtkb3duIC5jbS1jb21tZW50IHsqLwogICAgLypmb250LWZhbWlseTogIkNvdXJpZXIgbmV3IjsqLwogICAgLypjb2xvcjogZ3JheTsqLwovKn0qLwovKi5Db2RlTWlycm9yLmxhbmctbWFya2Rvd24gLmNtLXVybCB7Ki8KICAgIC8qY29sb3I6ICMwM2E5ZjQ7Ki8KLyp9Ki8KLyogLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCkZPT1RFUgotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi8KLmZvb3RlciB7CiAgICBwYWRkaW5nOiAyMHB4OwogICAgdGV4dC1hbGlnbjogcmlnaHQ7Cn0KLmZvb3RlciAudGhlbWVzIHsKICAgIGRpc3BsYXk6IGlubGluZS1ibG9jazsKfQouZm9vdGVyIC5jb3B5cmlnaHRzIHsKICAgIGRpc3BsYXk6IGlubGluZS1ibG9jazsKICAgIGNvbG9yOiBncmF5OwogICAgZm9udC1zaXplOiAxMXB4Owp9CgovKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KTE9HSU4gUEFHRQotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi8KLmxvZ2luLXBhZ2UgewogICAgYmFja2dyb3VuZDogIzMzMzMyRjsKfQoKLmxvZ2luLXBhZ2UgZm9ybSB7CiAgICBwb3NpdGlvbjogYWJzb2x1dGU7CiAgICB0b3A6IDUwJTsKICAgIGxlZnQ6IDUwJTsKICAgIHdpZHRoOiAyNjBweDsKICAgIG1pbi1oZWlnaHQ6IDIwMHB4OwogICAgbWFyZ2luOiAtMTUwcHggMCAwIC0xNTBweDsKICAgIHRleHQtYWxpZ246IGNlbnRlcjsKICAgIC8qYmFja2dyb3VuZDogI2VmOGQzMTsqLwogICAgYmFja2dyb3VuZDogcmdiKDE3NywgMTk5LCA1Nyk7CiAgICBib3JkZXItYm90dG9tOiA4cHggc29saWQgIzI3MjcyNzsKICAgIHBhZGRpbmc6IDIwcHg7Cn0KCi5sb2dpbi1wYWdlIC5mb3JtLWdyb3VwIHsKICAgIG1hcmdpbi1ib3R0b206IDEwcHg7Cn0KCi5sb2dpbi1wYWdlIC5mb3JtLWdyb3VwLmNoZWNrYm94IHsKICAgIHRleHQtYWxpZ246IGxlZnQ7Cn0KCi5sb2dpbi1wYWdlIGlucHV0W3R5cGU9dGV4dF0sIC5sb2dpbi1wYWdlIGlucHV0W3R5cGU9cGFzc3dvcmRdIHsKICAgIGJvcmRlcjogMDsKICAgIHdpZHRoOiAxMDAlOwogICAgcGFkZGluZzogMTBweCAxNXB4OwogICAgYm94LXNpemluZzogYm9yZGVyLWJveDsKfQoKLmxvZ2luLXBhZ2UgYnV0dG9uIHsKICAgIHdpZHRoOiAxMDAlOwogICAgYm9yZGVyOiAwOwogICAgYmFja2dyb3VuZDogIzM1MzUzNTsKICAgIGNvbG9yOiAjZmZmOwogICAgcGFkZGluZzogMTBweDsKfQoKLmNvbnRlbnQgLmNvZGUtYWN0aW9uLWRvd25sb2FkIHsKICAgIGJhY2tncm91bmQ6IHJnYigyOSwgMzIsIDMzKTsKICAgIHRvcDogLThweDsKICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgIGNvbG9yOiAjRkZDMTA3OwogICAgdGV4dC10cmFuc2Zvcm06IHVwcGVyY2FzZTsKICAgIGZvbnQtc2l6ZTogMTBweDsKICAgIGhlaWdodDogMjVweDsKICAgIGRpc3BsYXk6IGlubGluZS1ibG9jazsKICAgIHBhZGRpbmc6IDZweCA2cHg7Cn0KLmNvZGUtYWN0aW9uLWRvd25sb2FkOmhvdmVyIHsKICAgIC8qYmFja2dyb3VuZDogcmdiYSgyNTUsIDI1NSwgMjU1LCAwLjUpOyovCiAgICBjb2xvcjogI2ZmZjsKfQoKLyoqCiAqIG9rYWlkaWEgdGhlbWUgZm9yIEphdmFTY3JpcHQsIENTUyBhbmQgSFRNTAogKiBMb29zZWx5IGJhc2VkIG9uIE1vbm9rYWkgdGV4dG1hdGUgdGhlbWUgYnkgaHR0cDovL3d3dy5tb25va2FpLm5sLwogKiBAYXV0aG9yIG9jb2RpYQogKi8KCmNvZGVbY2xhc3MqPSJsYW5ndWFnZS0iXSwKcHJlW2NsYXNzKj0ibGFuZ3VhZ2UtIl0gewogICAgY29sb3I6ICNmOGY4ZjI7CiAgICBiYWNrZ3JvdW5kOiBub25lOwogICAgdGV4dC1zaGFkb3c6IDAgMXB4IHJnYmEoMCwgMCwgMCwgMC4zKTsKICAgIGZvbnQtZmFtaWx5OiBDb25zb2xhcywgTW9uYWNvLCAnQW5kYWxlIE1vbm8nLCAnVWJ1bnR1IE1vbm8nLCBtb25vc3BhY2U7CiAgICB0ZXh0LWFsaWduOiBsZWZ0OwogICAgd2hpdGUtc3BhY2U6IHByZTsKICAgIHdvcmQtc3BhY2luZzogbm9ybWFsOwogICAgd29yZC1icmVhazogbm9ybWFsOwogICAgd29yZC13cmFwOiBub3JtYWw7CiAgICBsaW5lLWhlaWdodDogMS41OwoKICAgIC1tb3otdGFiLXNpemU6IDQ7CiAgICAtby10YWItc2l6ZTogNDsKICAgIHRhYi1zaXplOiA0OwoKICAgIC13ZWJraXQtaHlwaGVuczogbm9uZTsKICAgIC1tb3otaHlwaGVuczogbm9uZTsKICAgIC1tcy1oeXBoZW5zOiBub25lOwogICAgaHlwaGVuczogbm9uZTsKfQoKY29kZVtjbGFzcyo9Imxhbmd1YWdlLSJdIHsKICAgIHBhZGRpbmc6IDFyZW07Cn0KCi8qIENvZGUgYmxvY2tzICovCnByZVtjbGFzcyo9Imxhbmd1YWdlLSJdIHsKICAgIHBhZGRpbmc6IDFlbTsKICAgIG1hcmdpbjogLjVlbSAwOwogICAgb3ZlcmZsb3c6IGF1dG87CiAgICBib3JkZXItcmFkaXVzOiAwLjNlbTsKfQoKOm5vdChwcmUpID4gY29kZVtjbGFzcyo9Imxhbmd1YWdlLSJdLApwcmVbY2xhc3MqPSJsYW5ndWFnZS0iXSB7CiAgICBiYWNrZ3JvdW5kOiAjMjcyODIyOwp9CgovKiBJbmxpbmUgY29kZSAqLwo6bm90KHByZSkgPiBjb2RlW2NsYXNzKj0ibGFuZ3VhZ2UtIl0gewogICAgcGFkZGluZzogLjFlbTsKICAgIGJvcmRlci1yYWRpdXM6IC4zZW07CiAgICB3aGl0ZS1zcGFjZTogbm9ybWFsOwp9CgoudG9rZW4uY29tbWVudCwKLnRva2VuLnByb2xvZywKLnRva2VuLmRvY3R5cGUsCi50b2tlbi5jZGF0YSB7CiAgICBjb2xvcjogc2xhdGVncmF5OwogICAgZm9udC1mYW1pbHk6ICdDb3VzaW5lJywgbW9ub3NwYWNlOwp9CgoudG9rZW4uY29tbWVudCB7CiAgICBmb250LXNpemU6IDE0cHg7Cn0KCi50b2tlbi5wdW5jdHVhdGlvbiB7CiAgICBjb2xvcjogI2Y4ZjhmMjsKfQoKLm5hbWVzcGFjZSB7CiAgICBvcGFjaXR5OiAuNzsKfQoKLnRva2VuLnByb3BlcnR5LAoudG9rZW4udGFnLAoudG9rZW4uY29uc3RhbnQsCi50b2tlbi5zeW1ib2wsCi50b2tlbi5kZWxldGVkIHsKICAgIGNvbG9yOiAjZjkyNjcyOwp9CgoudG9rZW4uYm9vbGVhbiwKLnRva2VuLm51bWJlciB7CiAgICBjb2xvcjogI2FlODFmZjsKfQoKLnRva2VuLnNlbGVjdG9yLAoudG9rZW4uYXR0ci1uYW1lLAoudG9rZW4uc3RyaW5nLAoudG9rZW4uY2hhciwKLnRva2VuLmJ1aWx0aW4sCi50b2tlbi5pbnNlcnRlZCB7CiAgICBjb2xvcjogI2E2ZTIyZTsKfQoKLnRva2VuLm9wZXJhdG9yLAoudG9rZW4uZW50aXR5LAoudG9rZW4udXJsLAoubGFuZ3VhZ2UtY3NzIC50b2tlbi5zdHJpbmcsCi5zdHlsZSAudG9rZW4uc3RyaW5nLAoudG9rZW4udmFyaWFibGUgewogICAgY29sb3I6ICNmOGY4ZjI7Cn0KCi50b2tlbi5hdHJ1bGUsCi50b2tlbi5hdHRyLXZhbHVlLAoudG9rZW4uZnVuY3Rpb24gewogICAgY29sb3I6ICNlNmRiNzQ7Cn0KCi50b2tlbi5rZXl3b3JkIHsKICAgIGNvbG9yOiAjNjZkOWVmOwp9CgoudG9rZW4ucmVnZXgsCi50b2tlbi5pbXBvcnRhbnQgewogICAgY29sb3I6ICNmZDk3MWY7Cn0KCi50b2tlbi5pbXBvcnRhbnQsCi50b2tlbi5ib2xkIHsKICAgIGZvbnQtd2VpZ2h0OiBib2xkOwp9Ci50b2tlbi5pdGFsaWMgewogICAgZm9udC1zdHlsZTogaXRhbGljOwp9CgoudG9rZW4uZW50aXR5IHsKICAgIGN1cnNvcjogaGVscDsKfQoKLmV2ZW50IHsKICAgIG1hcmdpbi10b3A6IDYwcHg7Cn0KLmV2ZW50LW5hbWUgewogICAgZGlzcGxheTogYmxvY2s7CiAgICBiYWNrZ3JvdW5kOiAjMjE5NmYzOwogICAgcGFkZGluZzogMTJweCAwIDAgMTBweDsKICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKfQouZXZlbnQtbmFtZS1sYWJlbCB7CiAgICBkaXNwbGF5OiBub25lOwp9Ci5ldmVudC1uYW1lLW5hbWUgewogICAgZm9udC1zaXplOiAycmVtOwogICAgZGlzcGxheTogYmxvY2s7CiAgICAvKiBtYXJnaW4tdG9wOiAtMTlweDsgKi8KICAgIGNvbG9yOiByZ2IoMjU1LCAyNTUsIDI1NSk7Cn0KLmV2ZW50LW5hbWUtbGluayB7CiAgICBwb3NpdGlvbjogYWJzb2x1dGU7CiAgICByaWdodDogMjVweDsKICAgIHRvcDogMTZweDsKICAgIGNvbG9yOiAjZmZmICFpbXBvcnRhbnQ7CiAgICB0ZXh0LWRlY29yYXRpb246IG5vbmUgIWltcG9ydGFudDsKfQoKLmV2ZW50LW1vZHVsZS1sYWJlbCB7CiAgICBkaXNwbGF5OiBub25lOwp9Ci5ldmVudC1tb2R1bGUtbmFtZSB7CiAgICBkaXNwbGF5OiBibG9jazsKICAgIHRleHQtdHJhbnNmb3JtOiB1cHBlcmNhc2U7CiAgICBmb250LXNpemU6IC43cmVtOwogICAgZm9udC13ZWlnaHQ6IDMwMDsKICAgIGNvbG9yOiAjYzNlNGZmOwogICAgbWFyZ2luLWJvdHRvbTogLTMwcHg7CiAgICBwYWRkaW5nLWxlZnQ6IDEycHg7CiAgICBwb3NpdGlvbjogcmVsYXRpdmU7CiAgICB6LWluZGV4OiA5OTk5Owp9Ci5ldmVudC1hcmd1bWVudHMgewoKfQouZXZlbnQtYXJndW1lbnRzIHRhYmxlIHsKfQouZXZlbnQtYXJndW1lbnRzIHRhYmxlIHRyIHRoIHsKICAgIGJvcmRlcjogMDsKICAgIHRleHQtdHJhbnNmb3JtOiBsb3dlcmNhc2U7CiAgICBmb250LXdlaWdodDogMzAwOwogICAgZm9udC1zaXplOiAuOHJlbTsKICAgIGNvbG9yOiAjYzZkZWU2OwogICAgcGFkZGluZy10b3A6IDJweDsKICAgIHBhZGRpbmctYm90dG9tOiAycHg7Cn0KLmV2ZW50LWFyZ3VtZW50cyB0YWJsZSB0ciB0ZCB7CiAgICBib3JkZXI6IDA7Cn0KdGQuZXZlbnQtYXJndW1lbnQtdHlwZSB7CiAgICBmb250LXN0eWxlOiBpdGFsaWM7Cn0KLmV2ZW50LXRvYy1oZWFkaW5nLCAuZXZlbnQtY2FsbGVkLWhlYWRpbmcsIC5ldmVudC1hcmd1bWVudHMtaGVhZGluZyB7CiAgICBmb250LXNpemU6IDEuMnJlbTsKICAgIGNvbG9yOiAjYzZkZWU2OwogICAgYmFja2dyb3VuZDogIzI3MjcyNzsKICAgIGRpc3BsYXk6IGJsb2NrOwogICAgcGFkZGluZzogMnB4IDAgMnB4IDEwcHg7CiAgICBtYXJnaW4tdG9wOiAxMHB4Owp9Ci5ldmVudC10b2MgewogICAgbWFyZ2luLWJvdHRvbTogMjBweDsKICAgIGJhY2tncm91bmQ6ICMyNzI4MjI7CiAgICBwYWRkaW5nOiAyMHB4Owp9Ci5ldmVudC10b2MgYSB7CiAgICBjb2xvcjogI2ZmZjsKfQouZXZlbnQtdG9jLWxpc3QgewogICAgbWFyZ2luLWxlZnQ6IDEwcHg7Cn0KLmV2ZW50LWNhbGxlZC1saXN0IHsKICAgIHBhZGRpbmctbGVmdDogMTBweCAhaW1wb3J0YW50Owp9');
 }
 
 
@@ -5151,6 +6434,7 @@ function view_4cc347ed786a2b22334b44fd54e1f5ba(array $data = []) {
                 editor.codemirror.on('change', function() {
                     $saveBtns.removeAttr('disabled');
                 });
+                editor.codemirror.setOption('rulers', [{ color: '#ccc', column: 80, lineStyle: 'dashed' }]);
 
 //                editor = CodeMirror.fromTextArea(document.getElementById("textarea"), {
 //                    mode: 'markdown',
@@ -5210,7 +6494,8 @@ function view_4cc347ed786a2b22334b44fd54e1f5ba(array $data = []) {
 
             var toc = $('#page-toc');
             $('#page-toc').toc({
-                container: '.content-inner'
+                container: '.content-inner',
+                selectors: 'h2,h3,h4'
             });
 
             if ($('>ul', toc).is(':empty')) {
@@ -5218,13 +6503,31 @@ function view_4cc347ed786a2b22334b44fd54e1f5ba(array $data = []) {
                 // ----
 
                 toc.remove();
-            } else {
+            } else if (toc.length) {
                 // Scroll to nav toc
                 $('.nav')[0].scrollTop = toc.position().top;
-
-                // Remove h1 from toc
-                toc.find('.toc-h1:first').remove();
             }
+
+//            // Toggle headers as it would be sections.
+//            $('body').on('click', 'h1, h2, h3, h4, h5, h6', function() {
+//                var h = $(this),
+//                    visible = !h.hasClass('collapsed');
+//
+//                if (visible) {
+//                    h.addClass('collapsed');
+//                } else {
+//                    h.removeClass('collapsed');
+//                }
+//
+//                h.nextUntil(this.localName).each(function() {
+//                    if (visible) {
+//                        this.setAttribute('data-display', this.style.display);
+//                        this.style.display = 'none';
+//                    } else {
+//                        this.style.display = this.getAttribute('data-display');
+//                    }
+//                });<?php //$app->getCurrentUrl() ?>
+//            });
         </script>
     </body>
 </html>

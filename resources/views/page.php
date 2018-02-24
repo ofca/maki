@@ -15,6 +15,7 @@
         <script src="<?php echo $app->getResourceUrl('resources/jquery.js') ?>"></script>
         <script src="<?php echo $app->getResourceUrl('resources/prism.js') ?>"></script>
         <script src="<?php echo $app->getResourceUrl('resources/toc.min.js') ?>"></script>
+        <script src="<?php echo $app->getResourceUrl('resources/mermaid.min.js') ?>"></script>
         <script>
             var __PAGE_PATH__ = '<?php echo $page->getFilePath() ?>';
         </script>
@@ -214,6 +215,8 @@
                 // Scroll to nav toc
                 $('.nav')[0].scrollTop = toc.position().top;
             }
+
+            mermaid.initialize({ startOnLoad: true });
 
 //            // Toggle headers as it would be sections.
 //            $('body').on('click', 'h1, h2, h3, h4, h5, h6', function() {

@@ -24,7 +24,11 @@ namespace Maki;
  * @todo if saving return error 500 it stop saving (don't know what markdown shit return 500 when saving).
  * @todo Allow renaming directories (whole paths). For example move all from cmscore/ to symfony-v1/cmscore; this should not only move files but also update all pathes in all files.
  * @todo allow collapse sections and remember it.
- * @todo allow defining images - in config allow to define custom markup which will be inserting defined image. eg. images: { "icon:preventable": "img/icons/preventable.png" } then in editor  [img:icon:preventable] which will be replaced to markdown ![img:icon:preventable](img/icons/preventable.png).
+ * @todo remove text-decoration: underline from event-toc
+ * @todo add alias "events-toc" to "event-toc" (missing "s").
+ * @todo add "preventable" and "delayable/deferrable" labels to events.
+ * @todo remove "underline" from "toc" in events view.
+ * @todo "toc" in events view should have headers like in content.
  */
 class Maki extends \Pimple
 {

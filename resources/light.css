@@ -812,3 +812,11 @@ td.event-argument-type {
 .event-called-list {
     padding-left: 10px !important;
 }
+
+.mermaid .edgePath .path {
+    stroke: #7e878a;
+}
+.mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node rect {
+    fill: #ffffff;
+    stroke-width: 0px;
+}
